@@ -1,0 +1,138 @@
+{
+  "version": 5,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "D-Windows-x86-Debug",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "Win32",
+      "binaryDir": "${sourceDir}/out/build/D-Windows-x86-Debug",
+      "installDir": "${sourceDir}/out/install/D-Windows-x86-Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_SHARED_LIBS": "OFF",
+        "WARNINGS_AS_ERRORS": "OFF",
+        "BUILD_ARCH": "x86"
+      },
+      "environment": {
+        "VSCMD_ARG_TGT_ARCH": "x86",
+        "VSCMD_ARG_HOST_ARCH": "x64"
+      }
+    },
+    {
+      "name": "Windows-x86-Release",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "Win32",
+      "binaryDir": "${sourceDir}/out/build/Windows-x86-Release",
+      "installDir": "${sourceDir}/out/install/Windows-x86-Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_SHARED_LIBS": "OFF",
+        "WARNINGS_AS_ERRORS": "OFF",
+        "BUILD_ARCH": "x86"
+      },
+      "environment": {
+        "VSCMD_ARG_TGT_ARCH": "x86",
+        "VSCMD_ARG_HOST_ARCH": "x64"
+      }
+    },
+    {
+      "name": "Windows-x64-Debug",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/Windows-x64-Debug",
+      "installDir": "${sourceDir}/out/install/Windows-x64-Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_SHARED_LIBS": "OFF",
+        "WARNINGS_AS_ERRORS": "OFF",
+        "BUILD_ARCH": "x64"
+      },
+      "environment": {
+        "VSCMD_ARG_TGT_ARCH": "x64",
+        "VSCMD_ARG_HOST_ARCH": "x64"
+      }
+    },
+    {
+      "name": "Windows-x64-Release",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/Windows-x64-Release",
+      "installDir": "${sourceDir}/out/install/Windows-x64-Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_SHARED_LIBS": "OFF",
+        "WARNINGS_AS_ERRORS": "OFF",
+        "BUILD_ARCH": "x64"
+      },
+      "environment": {
+        "VSCMD_ARG_TGT_ARCH": "x64",
+        "VSCMD_ARG_HOST_ARCH": "x64"
+      }
+    },
+    {
+      "name": "Windows-ARM64-Debug",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "ARM64",
+      "binaryDir": "${sourceDir}/out/build/Windows-ARM64-Debug",
+      "installDir": "${sourceDir}/out/install/Windows-ARM64-Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_SHARED_LIBS": "OFF",
+        "WARNINGS_AS_ERRORS": "OFF",
+        "BUILD_ARCH": "ARM64"
+      },
+      "environment": {
+        "VSCMD_ARG_TGT_ARCH": "arm64",
+        "VSCMD_ARG_HOST_ARCH": "x64"
+      }
+    },
+    {
+      "name": "Windows-ARM64-Release",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "ARM64",
+      "binaryDir": "${sourceDir}/out/build/Windows-ARM64-Release",
+      "installDir": "${sourceDir}/out/install/Windows-ARM64-Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_SHARED_LIBS": "OFF",
+        "WARNINGS_AS_ERRORS": "OFF",
+        "BUILD_ARCH": "ARM64"
+      },
+      "environment": {
+        "VSCMD_ARG_TGT_ARCH": "arm64",
+        "VSCMD_ARG_HOST_ARCH": "x64"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-D-Windows-x86-Debug",
+      "configurePreset": "D-Windows-x86-Debug"
+    },
+    {
+      "name": "build-Windows-x86-Release",
+      "configurePreset": "Windows-x86-Release"
+    },
+    {
+      "name": "build-Windows-x64-Debug",
+      "configurePreset": "Windows-x64-Debug"
+    },
+    {
+      "name": "build-Windows-x64-Release",
+      "configurePreset": "Windows-x64-Release"
+    },
+    {
+      "name": "build-Windows-ARM64-Debug",
+      "configurePreset": "Windows-ARM64-Debug"
+    },
+    {
+      "name": "build-Windows-ARM64-Release",
+      "configurePreset": "Windows-ARM64-Release"
+    }
+  ]
+}

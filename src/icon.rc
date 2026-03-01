@@ -1,0 +1,11 @@
+#include "resource.h"
+
+IDI_ICON2           ICON                    "AppLogo.ico"
+ID_RES1             BINARY                  "../assets/Res/Montserrat.ttf"
+ID_RES2             BINARY                  "../assets/Res/Languages.csv"
+ID_RES3             BINARY                  "../assets/Res/Galaxy.png"
+ID_RES4             BINARY                  "../assets/Res/Tools.png"
+ID_RES5             BINARY                  "../assets/Res/CanvasIcons.png"
+ID_RES6             BINARY                  "../assets/Res/Setup.png"
+ID_RES7             BINARY                  "../assets/Res/Gizmo.png"
+ID_RES8             BINARY                  "../assets/Res/LayerIcons.png"

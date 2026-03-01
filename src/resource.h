@@ -1,0 +1,9 @@
+#define IDI_ICON2 100
+#define ID_RES1							101
+#define ID_RES2							102
+#define ID_RES3							103
+#define ID_RES4							104
+#define ID_RES5							105
+#define ID_RES6							106
+#define ID_RES7							107
+#define ID_RES8							108
