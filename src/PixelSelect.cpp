@@ -88,19 +88,16 @@ void glxy::PixelSelect::clear()
 {
     chunkManager.deleteSelectionLayer();
     tempSelectedArea.reset();
-    finalBounds.reset();
-    selectionActive = false;
-    started = false;
-}
+    tempSelectedAreaPosition = Vector2i();
 
-void glxy::PixelSelect::setSize(const Vector2u size)
-{
-    selectedWand.resize(size, Color::Transparent);
+    finalBounds.reset();
+    started = false;
 }
 
 void glxy::PixelSelect::selectAll()
 {
     boxShapeStart(Vector2u(0, 0), true, ShapeSelectType::Box);
+    chunkManager.createSelectionLayer();
     boxShapeEnd(chunkManager.getSize() - Vector2u(1, 1));
     boxShapeFinish();
 }
@@ -111,7 +108,6 @@ void glxy::PixelSelect::boxShapeStart(const Vector2u startPos, const bool additi
     selectShape = pair(IntRect(Vector2i(startPos), {0, 0}), additive);
     this->startPos = startPos;
     started = true;
-    selectionActive = true;
 }
 
 void glxy::PixelSelect::boxShapeEnd(const Vector2u endPos)
@@ -183,9 +179,6 @@ void glxy::PixelSelect::boxShapeEnd(const Vector2u endPos)
 
 void glxy::PixelSelect::boxShapeFinish()
 {
-    tempSelectedArea.reset();
-    tempSelectedAreaPosition = Vector2i();
-
     started = false;
     if (shapeSelectType == ShapeSelectType::Box)
     {
@@ -215,17 +208,18 @@ void glxy::PixelSelect::boxShapeFinish()
             }
     }
 
-    finalBounds = make_unique<IntRect>(getUnion(&selectShape.first, finalBounds.get()));
+    finalBounds = std::make_shared<IntRect>(getUnion(&selectShape.first, finalBounds.get()));
     endPos = Vector2u(-1, -1);
 }
 
-void glxy::PixelSelect::wandSelect(const Vector2u pos, const bool additive, const int8_t tolerance)
+void glxy::PixelSelect::wandSelect(const Vector2u pos, const int8_t tolerance)
 {
-    if (this->endPos == pos)
+    if (wandCache && wandCache->first == pos && wandCache->second == tolerance)
         return;
     const uint16_t chunkSizeNative = chunkManager.getChunkSizeNative();
-    this->endPos = pos;
-    const IntRect area = chunkManager.FloodFill(Vector2i(pos), Color::Black, tolerance, &selectedWand, false);
+    selectedWand = make_unique<Image>(chunkManager.getSize(), Color::Transparent);
+    wandCache = make_unique<pair<Vector2u, int8_t>>(pos, tolerance);
+    const IntRect area = chunkManager.FloodFill(Vector2i(pos), Color::Black, tolerance, selectedWand.get(), false);
 
     if (selectWand == IntRect())
         selectWand = area;
@@ -244,7 +238,7 @@ void glxy::PixelSelect::wandSelect(const Vector2u pos, const bool additive, cons
             for (int32_t ix = 0; ix < img.getSize().x; ix++)
                 for (int32_t iy = 0; iy < img.getSize().y; iy++)
                 {
-                    const Color targetPixel = selectedWand.getPixel(Vector2u(ix + x * chunkSizeNative, iy + y * chunkSizeNative));
+                    const Color targetPixel = selectedWand->getPixel(Vector2u(ix + x * chunkSizeNative, iy + y * chunkSizeNative));
                     if (targetPixel == Color::Transparent)
                         continue;
                     img.setPixel(Vector2u(Vector2i(ix, iy)),
@@ -253,35 +247,32 @@ void glxy::PixelSelect::wandSelect(const Vector2u pos, const bool additive, cons
             chunkManager.updateSelectionTextureFromImage(ID, img);
         }
     selectWand = area;
-    selectionActive = true;
 }
 
-void glxy::PixelSelect::wandClear()
+void glxy::PixelSelect::wandCancel()
 {
-    tempSelectedArea.reset();
-    tempSelectedAreaPosition = Vector2i();
-    selectedWand.resize(selectedWand.getSize(), Color::Transparent);
+    selectedWand.reset();
+    wandCache.reset();
     selectWand = IntRect();
-    endPos = Vector2u(-1, -1);
 }
 
 void glxy::PixelSelect::wandFinish()
 {
-    tempSelectedArea.reset();
-    tempSelectedAreaPosition = Vector2i();
-
+    if (!selectedWand)
+        return;
     for (int32_t x = selectWand.position.x; x < selectWand.position.x + selectWand.size.x; x++)
         for (int32_t y = selectWand.position.y; y < selectWand.position.y + selectWand.size.y; y++)
         {
-            const Color targetPixel = selectedWand.getPixel(Vector2u(x, y));
+            const Color targetPixel = selectedWand->getPixel(Vector2u(x, y));
             if (targetPixel == Color::Transparent)
                 continue;
             chunkManager.setPixelSelected(Vector2u(Vector2i(x, y)), targetPixel == Color::Black);
         }
 
-    finalBounds = make_unique<IntRect>(getUnion(finalBounds.get(), &selectWand));
+    finalBounds = std::make_shared<IntRect>(getUnion(finalBounds.get(), &selectWand));
     selectWand = IntRect();
-    endPos = Vector2u(-1, -1);
+    selectedWand.reset();
+    wandCache.reset();
 }
 
 void glxy::PixelSelect::createTempSelection(const Vector2u size)
@@ -295,16 +286,16 @@ void glxy::PixelSelect::createTempSelection(const Vector2u size)
 
 void glxy::PixelSelect::createTempSelectionFromSelected()
 {
-    const IntRect* bounds = getFinalSelectionBounds();
-    assert(bounds);
+    assert(!getFinalSelectionBounds().expired());
+    const IntRect bounds = *getFinalSelectionBounds().lock();
     if (!tempSelectedArea)
     {
-        createTempSelection(Vector2u(bounds->size));
-        const std::optional<IntRect> intersect = bounds->findIntersection(IntRect({0, 0}, Vector2i(chunkManager.getSize())));
+        createTempSelection(Vector2u(bounds.size));
+        const std::optional<IntRect> intersect = bounds.findIntersection(IntRect({0, 0}, Vector2i(chunkManager.getSize())));
         if (intersect)
-            chunkManager.CopyImage(*tempSelectedArea, Vector2u(intersect->position - bounds->position), *intersect, ImageCopyType::Selection);
+            chunkManager.CopyImage(*tempSelectedArea, Vector2u(intersect->position - bounds.position), *intersect, ImageCopyType::Selection);
     }
-    tempSelectedAreaPosition = bounds->position;
+    tempSelectedAreaPosition = bounds.position;
 }
 
 void glxy::PixelSelect::copyTempSelection(const Image& image) const
@@ -331,7 +322,9 @@ void glxy::PixelSelect::revertTempSelection()
         chunkManager.PasteImage(*tempSelectedArea, Vector2u(intersect->position),
             IntRect(intersect->position - Vector2i(tempSelectedAreaPosition), intersect->size), ImageCopyType::Selection);
     }
+    tempSelectedArea.reset();
     tempSelectedAreaPosition = Vector2i();
+
 }
 
 void glxy::PixelSelect::setSelectColor(const Color selectColor)
@@ -341,12 +334,12 @@ void glxy::PixelSelect::setSelectColor(const Color selectColor)
 
 void glxy::PixelSelect::setNewBounds(const IntRect& newBounds)
 {
-    finalBounds = make_unique<IntRect>(newBounds);
+    finalBounds = std::make_shared<IntRect>(newBounds);
 }
 
-IntRect* glxy::PixelSelect::getFinalSelectionBounds() const
+weak_ptr<const IntRect> glxy::PixelSelect::getFinalSelectionBounds() const
 {
-    return finalBounds.get();
+    return finalBounds;
 }
 
 IntRect glxy::PixelSelect::getBoxSelectArea() const
@@ -361,27 +354,40 @@ bool glxy::PixelSelect::withinTempBounds(const Vector2u pos) const
 
 void glxy::PixelSelect::copySelectedPixels(Image& dst, Vector2u& location, const int16_t layerID) const
 {
-    const IntRect* bounds = getFinalSelectionBounds();
-    assert(bounds);
-    dst.resize(Vector2u(bounds->size), Color::Transparent);
-    location = Vector2u(bounds->position);
-    for (int32_t x = bounds->position.x; x < bounds->position.x + bounds->size.x; x++)
-        for (int32_t y = bounds->position.y; y < bounds->position.y + bounds->size.y; y++)
+    assert(!getFinalSelectionBounds().expired());
+    const IntRect bounds = *getFinalSelectionBounds().lock();
+    dst.resize(Vector2u(bounds.size), Color::Transparent);
+    location = Vector2u(bounds.position);
+    for (int32_t x = bounds.position.x; x < bounds.position.x + bounds.size.x; x++)
+        for (int32_t y = bounds.position.y; y < bounds.position.y + bounds.size.y; y++)
+        {
+            if (x < 0 || y < 0 || x >= chunkManager.getSize().x || y >= chunkManager.getSize().y)
+                continue;
             if (chunkManager.getPixelSelected(Vector2u(x, y)))
-                dst.setPixel(Vector2u(x - bounds->position.x, y - bounds->position.y), chunkManager.getPixelColor(Vector2u(x, y), layerID));
+                dst.setPixel(Vector2u(x - bounds.position.x, y - bounds.position.y), chunkManager.getPixelColor(Vector2u(x, y), layerID));
+        }
 }
 
 void glxy::PixelSelect::clearSelectedPixels() const
 {
-    const IntRect* bounds = getFinalSelectionBounds();
-    assert(bounds);
-    for (int32_t x = bounds->position.x; x < bounds->position.x + bounds->size.x; x++)
-        for (int32_t y = bounds->position.y; y < bounds->position.y + bounds->size.y; y++)
+    assert(!getFinalSelectionBounds().expired());
+    const IntRect bounds = *getFinalSelectionBounds().lock();
+    for (int32_t x = bounds.position.x; x < bounds.position.x + bounds.size.x; x++)
+        for (int32_t y = bounds.position.y; y < bounds.position.y + bounds.size.y; y++)
+        {
+            if (x < 0 || y < 0 || x >= chunkManager.getSize().x || y >= chunkManager.getSize().y)
+                continue;
             if (chunkManager.getPixelSelected(Vector2u(x, y)))
                 chunkManager.setPixelColor(Vector2u(x, y), Color::Transparent);
+        }
 }
 
 const Image* glxy::PixelSelect::getTempMask() const
+{
+    return tempSelectedArea.get();
+}
+
+bool glxy::PixelSelect::hasTempSelection() const
 {
     return tempSelectedArea.get();
 }
@@ -421,7 +427,7 @@ void glxy::PixelSelect::draw(RenderTarget& target, RenderStates states) const
     {
         const Vector2u chunkID = Vector2u(i % chunkManager.getChunkCount().x, i / chunkManager.getChunkCount().x);
         const Vector2u size = chunkManager.getChunkSize(i);
-        const std::array v = {
+        const array v = {
             Vertex{Vector2f(chunkID.x * chunkSizeNative, chunkID.y * chunkSizeNative), Color::White, Vector2f(0, 0)},
             Vertex{Vector2f(chunkID.x * chunkSizeNative + size.x, chunkID.y * chunkSizeNative), Color::White, Vector2f(1, 0)},
             Vertex{Vector2f(chunkID.x * chunkSizeNative + size.x, chunkID.y * chunkSizeNative + size.y), Color::White, Vector2f(1, 1)},
@@ -429,7 +435,7 @@ void glxy::PixelSelect::draw(RenderTarget& target, RenderStates states) const
         };
 
         Transformable t;
-        const std::array offsets = {Vector2f(-offset, -offset), Vector2f(offset, -offset), Vector2f(offset, offset), Vector2f(-offset, offset)};
+        const array offsets = {Vector2f(-offset, -offset), Vector2f(offset, -offset), Vector2f(offset, offset), Vector2f(-offset, offset)};
         for (int32_t j = 0; j < offsets.size(); j++)
         {
             t.setPosition(offsets.at(j));
@@ -442,13 +448,13 @@ void glxy::PixelSelect::draw(RenderTarget& target, RenderStates states) const
     glDisable(GL_ALPHA_TEST);
 #endif
     const IntRect bounds = IntRect({}, Vector2i(chunkManager.getSize()));
-    const std::array v = {
+    const array v = {
         Vertex{Vector2f(bounds.position), selectColor},
         Vertex{Vector2f(bounds.position.x + bounds.size.x, bounds.position.y), selectColor},
         Vertex{Vector2f(bounds.position + bounds.size), selectColor},
         Vertex{Vector2f(bounds.position.x, bounds.position.y + bounds.size.y), selectColor},
     };
-    const std::array v2 = {
+    const array v2 = {
         Vertex{Vector2f(bounds.position), Color::White},
         Vertex{Vector2f(bounds.position.x + bounds.size.x, bounds.position.y), Color::White},
         Vertex{Vector2f(bounds.position + bounds.size), Color::White},
@@ -487,14 +493,14 @@ void glxy::PixelSelect::draw(RenderTarget& target, RenderStates states) const
         glEnable(GL_ALPHA_TEST);
         glAlphaFunc(GL_GREATER, 0.5f);
 #endif
-        const std::array v = {
+        const array v = {
             Vertex{Vector2f(selectShape.first.position.x, selectShape.first.position.y), Color::White},
             Vertex{Vector2f(selectShape.first.position.x + selectShape.first.size.x, selectShape.first.position.y), Color::White},
             Vertex{Vector2f(selectShape.first.position.x + selectShape.first.size.x, selectShape.first.position.y + selectShape.first.size.y), Color::White},
             Vertex{Vector2f(selectShape.first.position.x, selectShape.first.position.y + selectShape.first.size.y), Color::White},
         };
         Transformable t;
-        const std::array offsets = {Vector2f(-offset, -offset), Vector2f(offset, -offset), Vector2f(offset, offset), Vector2f(-offset, offset)};
+        const array offsets = {Vector2f(-offset, -offset), Vector2f(offset, -offset), Vector2f(offset, offset), Vector2f(-offset, offset)};
         for (int32_t j = 0; j < offsets.size(); j++)
         {
             t.setPosition(offsets.at(j));

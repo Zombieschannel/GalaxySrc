@@ -8,25 +8,22 @@
 ColorPicker::ColorPicker(const Window& window, const float& GUIScale, const bool& rulerEnabled)
     : window(window), GUIScale(GUIScale), rulerEnabled(rulerEnabled)
 {
-    left = ImVec4(0, 0, 0, 1);
-    right = ImVec4(1, 1, 1, 1);
-    oldLeft = left;
-    oldRight = right;
+    colors.at(0) = ImVec4(0, 0, 0, 1);
+    if (c_colorCount > 1)
+        colors.at(1) = ImVec4(1, 1, 1, 1);
+    for (int8_t i = 0; i < c_colorCount; i++)
+        oldColors.at(i) = colors.at(i);
+
 }
 
-ImVec4 ColorPicker::getLeft() const
+ImVec4 ColorPicker::getColor(int8_t ID) const
 {
-    return left;
-}
-
-ImVec4 ColorPicker::getRight() const
-{
-    return right;
+    return colors.at(ID);
 }
 
 ImVec4 ColorPicker::getEditingColor() const
 {
-    return (editingLeft ? left : right);
+    return colors.at(editingColor);
 }
 
 bool ColorPicker::hasColorChanged() const
@@ -34,22 +31,15 @@ bool ColorPicker::hasColorChanged() const
     return colorChanged;
 }
 
-void ColorPicker::setLeft(const ImVec4& color)
+void ColorPicker::setColor(const int8_t ID, const ImVec4& color)
 {
-    left = color;
+    colors.at(ID) = color;
     colorChanged = true;
 }
 
-void ColorPicker::setRight(const ImVec4& color)
+void ColorPicker::setEditorColors(const int8_t ID, const ImVec4& color)
 {
-    right = color;
-    colorChanged = true;
-}
-
-void ColorPicker::setEditorColors(const ImVec4& left, const ImVec4& right)
-{
-    this->left = left;
-    this->right = right;
+    colors.at(ID) = color;
 }
 
 void ColorPicker::Draw()
@@ -67,40 +57,43 @@ void ColorPicker::Draw()
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
     {
         ImGui::PushStyleVarX(ImGuiStyleVar_ItemSpacing, 2);
+        if (c_colorCount == 2)
         {
-            ImGui::PushStyleColor(ImGuiCol_Button, editingLeft ? active : notActive);
+            ImGui::PushStyleColor(ImGuiCol_Button, editingColor == 0 ? active : notActive);
             if (ImGui::Button("Left color"_C, Vector2f(ImGui::GetContentRegionAvail().x / 2 - 30 * GUIScale, 25 * GUIScale)))
-                editingLeft = true;
+                editingColor = 0;
             ImGui::PopStyleColor();
 
             ImGui::SameLine();
-            if (ImGui::ColorButton("Left preview"_C, left, ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_AlphaPreview, Vector2f(25 * GUIScale, 25 * GUIScale)))
-                editingLeft = true;
+            if (ImGui::ColorButton("Left preview"_C, colors.at(0), ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_AlphaPreview, Vector2f(25 * GUIScale, 25 * GUIScale)))
+                editingColor = 0;
             ImGui::SameLine();
-        }
-        {
-            ImGui::PushStyleColor(ImGuiCol_Button, !editingLeft ? active : notActive);
+
+            ImGui::PushStyleColor(ImGuiCol_Button, editingColor == 1 ? active : notActive);
             if (ImGui::Button("Right color"_C, Vector2f(ImGui::GetContentRegionAvail().x - 30 * GUIScale, 25 * GUIScale)))
-                editingLeft = false;
+                editingColor = 1;
             ImGui::PopStyleColor();
 
             ImGui::SameLine();
-            if (ImGui::ColorButton("Right preview"_C, right, ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_AlphaPreview, Vector2f(25 * GUIScale, 25 * GUIScale)))
-                editingLeft = false;
+            if (ImGui::ColorButton("Right preview"_C, colors.at(1), ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_AlphaPreview, Vector2f(25 * GUIScale, 25 * GUIScale)))
+                editingColor = 1;
             ImGui::Spacing();
         }
         ImGui::PopStyleVar();
         if (ImGui::BeginChild("Scroll", Vector2f(0, -75 * GUIScale), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
         {
-            if (editingLeft)
+            if (c_colorCount == 2)
             {
-                if (ImGui::ColorPicker4(("Left"_S + "##Color").c_str(), &left.x, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview, &oldLeft.x))
-                    colorChanged = true;
-            }
-            else
-            {
-                if (ImGui::ColorPicker4(("Right"_S + "##Color").c_str(), &right.x, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview, &oldRight.x))
-                    colorChanged = true;
+                if (editingColor == 0)
+                {
+                    if (ImGui::ColorPicker4(("Left"_S + "##Color").c_str(), &colors.at(0).x, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview, &oldColors.at(0).x))
+                        colorChanged = true;
+                }
+                else if (editingColor == 1)
+                {
+                    if (ImGui::ColorPicker4(("Right"_S + "##Color").c_str(), &colors.at(1).x, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview, &oldColors.at(1).x))
+                        colorChanged = true;
+                }
             }
         }
         ImGui::EndChild();
@@ -142,7 +135,7 @@ void ColorPicker::Draw()
                 break;
             default: break;
             }
-            std::array<ImVec4, colors + specialColors> targetColors;
+            array<ImVec4, colors + specialColors> targetColors;
             for (uint8_t i = 0; i < specialColors; i++)
             {
                 float r, g, b;
@@ -170,17 +163,20 @@ void ColorPicker::Draw()
                 ImGui::ColorButton(("Color " + to_string(i + j * (colors + specialColors))).c_str(), color,
                     ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder | ImGuiColorEditFlags_AlphaPreview,
                     Vector2f(itemSize.x, min(itemSize.x, itemSize.y)));
-                if (ImGui::IsItemHovered() && InputEvent::isButtonReleased(Mouse::Button::Left))
+                if (c_colorCount == 2)
                 {
-                    editingLeft = true;
-                    left = color;
-                    colorChanged = true;
-                }
-                if (ImGui::IsItemHovered() && InputEvent::isButtonReleased(Mouse::Button::Right))
-                {
-                    editingLeft = false;
-                    right = color;
-                    colorChanged = true;
+                    if (ImGui::IsItemHovered() && InputEvent::isButtonReleased(Mouse::Button::Left))
+                    {
+                        editingColor = 0;
+                        this->colors.at(0) = color;
+                        colorChanged = true;
+                    }
+                    if (ImGui::IsItemHovered() && InputEvent::isButtonReleased(Mouse::Button::Right))
+                    {
+                        editingColor = 1;
+                        this->colors.at(1) = color;
+                        colorChanged = true;
+                    }
                 }
                 if (i != (colors + specialColors) - 1)
                     ImGui::SameLine(0, -1);
@@ -189,8 +185,8 @@ void ColorPicker::Draw()
         }
         if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
         {
-            oldLeft = left;
-            oldRight = right;
+            for (int8_t i = 0; i < this->colors.size(); i++)
+                oldColors.at(i) = this->colors.at(i);
         }
     }
     ImGui::End();

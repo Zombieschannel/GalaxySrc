@@ -3,7 +3,7 @@
 #include "Func.hpp"
 
 const uint8_t spacingMultiplier = 10;
-const std::array<uint8_t, 3> spacings = { 1, 2, 5 };
+const array<uint8_t, 3> spacings = { 1, 2, 5 };
 
 void RulerUI::addLabel(const bool isVertical, const Vector2f position, const float scale)
 {

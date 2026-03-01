@@ -77,6 +77,7 @@ void glxy::App::Start(const filesystem::path& filename, const bool openWithGalax
     }
 
     RecreateAppWindow();
+
     window.clear();
     window.display();
 
@@ -137,6 +138,10 @@ void glxy::App::RecreateAppWindow()
 
     window.create(VideoMode({ settings.resolution.x, settings.resolution.y }), c_AppName, settings.fullscreen ? Style::None : Style::Default,
         settings.fullscreen ? State::Fullscreen : State::Windowed, { 0U, 0U, settings.antialiasing, GLTarget / 10U, GLTarget % 10U});
+
+#ifdef SFML_SYSTEM_ANDROID
+    sleep(milliseconds(50));
+#endif
 
     window.setMinimumSize(Vector2u(800, 600));
     window.setIcon(Vector2u(windowLogo.getSize().x, windowLogo.getSize().y), windowLogo.getPixelsPtr());
@@ -249,7 +254,7 @@ void glxy::App::TitleBar()
     }
     if (ImGui::BeginMenu("File"_C))
     {
-        const std::array<string, c_fileMenuCnt> shortcuts = {
+        const array<string, c_fileMenuCnt> shortcuts = {
             Shortcuts::getName(ActionShortcut::NewImage), Shortcuts::getName(ActionShortcut::OpenImage),
             Shortcuts::getName(ActionShortcut::SaveImage), Shortcuts::getName(ActionShortcut::SaveImageAs), ""
         };
@@ -321,8 +326,8 @@ void glxy::App::TitleBar()
 
         if (ImGui::MenuItem("editMenu[3]"_C, Shortcuts::getName(ActionShortcut::SelectAll).c_str()))
         {
-            active->OptionSelectAll();
             active->currentTool = Tool::BoxSelect;
+            active->OptionSelectAll();
         }
 
         ImGui::BeginDisabled(!active || !active->chunkManager.hasSelectionLayer());
@@ -356,13 +361,13 @@ void glxy::App::TitleBar()
         }
         if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Paste] && clipboardImage)
         {
-            _imageEditor.at(activeImageEditor)->OptionPasteFromClipboard(*clipboardImage, clipboardLocation);
             _imageEditor.at(activeImageEditor)->currentTool = Tool::MoveSelection;
+            _imageEditor.at(activeImageEditor)->OptionPasteFromClipboard(*clipboardImage, clipboardLocation);
         }
         if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::SelectAll])
         {
-            _imageEditor.at(activeImageEditor)->OptionSelectAll();
             _imageEditor.at(activeImageEditor)->currentTool = Tool::BoxSelect;
+            _imageEditor.at(activeImageEditor)->OptionSelectAll();
         }
         if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::DeselectAll] && _imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer())
         {
@@ -385,7 +390,7 @@ void glxy::App::TitleBar()
             active->OptionZoomOut(false);
         if (ImGui::BeginMenu("viewMenu[2]"_C))
         {
-            const std::array zoomScales = {
+            const array zoomScales = {
                 1, 2, 5, 10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 1000, 2000, 5000
             };
             const float bestFitZoom = active ? active->getBestFitSize() : 0;
@@ -583,7 +588,7 @@ void glxy::App::SubTitleBar()
     case Tool::MoveSelection:
         ImGui::SameLine();
         ImGui::BeginDisabled(!_imageEditor.at(activeImageEditor)->moveSelection);
-        if (ImGui::Button("Cancel"_C))
+        if (ImGui::Button("Cancel"_C) || popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
             _imageEditor.at(activeImageEditor)->OptionCancel();
         ImGui::SameLine();
         if (ImGui::Button("Finish"_C) || popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
@@ -600,14 +605,11 @@ void glxy::App::SubTitleBar()
             settings.wandTolerance = tolerance;
             auto& target = _imageEditor.at(activeImageEditor);
             if (target->wandFill)
-            {
-                target->pixelSelect.wandClear();
-                target->pixelSelect.wandSelect(Vector2u(target->wandFillPosition), true, tolerance);
-            }
+                target->pixelSelect.wandSelect(Vector2u(target->wandFillPosition), tolerance);
         }
         ImGui::SameLine();
         ImGui::BeginDisabled(!_imageEditor.at(activeImageEditor)->wandFill);
-        if (ImGui::Button("Cancel"_C))
+        if (ImGui::Button("Cancel"_C) || popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
             _imageEditor.at(activeImageEditor)->OptionCancel();
         ImGui::SameLine();
         if (ImGui::Button("Finish"_C) || popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
@@ -651,7 +653,7 @@ void glxy::App::SubTitleBar()
         }
         ImGui::SameLine();
         ImGui::BeginDisabled(!_imageEditor.at(activeImageEditor)->bucketFill);
-        if (ImGui::Button("Cancel"_C))
+        if (ImGui::Button("Cancel"_C) || popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
         {
             _imageEditor.at(activeImageEditor)->OptionCancel();
         }
@@ -666,7 +668,7 @@ void glxy::App::SubTitleBar()
     case Tool::Gradient:
         ImGui::SameLine();
         ImGui::BeginDisabled(!_imageEditor.at(activeImageEditor)->gradientDraw);
-        if (ImGui::Button("Cancel"_C))
+        if (ImGui::Button("Cancel"_C) || popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
         {
             _imageEditor.at(activeImageEditor)->OptionCancel();
         }
@@ -733,7 +735,7 @@ void glxy::App::MainWindow()
             }
             if (n->gradientDraw)
             {
-                n->GradientPixels(n->gradientStart.getPosition(), n->gradientEnd.getPosition(), _colorPicker.getLeft(), _colorPicker.getRight());
+                n->GradientPixels(n->gradientStart.getPosition(), n->gradientEnd.getPosition(), _colorPicker.getColor(0), _colorPicker.getColor(1));
             }
         }
     }
@@ -850,17 +852,20 @@ void glxy::App::app()
         if (!someEditorHovered && activeImageEditor != -1)
         {
             _toolPicker.setTool(_imageEditor.at(activeImageEditor)->currentTool, false);
-            _colorPicker.setEditorColors(_imageEditor.at(activeImageEditor)->currentLeftColor, _imageEditor.at(activeImageEditor)->currentRightColor);
+            for (int8_t i = 0; i < c_colorCount; i++)
+                _colorPicker.setEditorColors(i, _imageEditor.at(activeImageEditor)->currentColor.at(i));
         }
         else if (hoveredImageEditor != -1)
         {
             _toolPicker.setTool(_imageEditor.at(hoveredImageEditor)->currentTool, false);
-            _colorPicker.setEditorColors(_imageEditor.at(hoveredImageEditor)->currentLeftColor, _imageEditor.at(hoveredImageEditor)->currentRightColor);
+            for (int8_t i = 0; i < c_colorCount; i++)
+                _colorPicker.setEditorColors(i, _imageEditor.at(hoveredImageEditor)->currentColor.at(i));
         }
         else if (activeImageEditor != -1)
         {
             _toolPicker.setTool(_imageEditor.at(activeImageEditor)->currentTool, false);
-            _colorPicker.setEditorColors(_imageEditor.at(activeImageEditor)->currentLeftColor, _imageEditor.at(activeImageEditor)->currentRightColor);
+            for (int8_t i = 0; i < c_colorCount; i++)
+                _colorPicker.setEditorColors(i, _imageEditor.at(activeImageEditor)->currentColor.at(i));
         }
 
         TitleBar();
@@ -871,18 +876,18 @@ void glxy::App::app()
         {
             if (!someEditorHovered && activeImageEditor != -1)
             {
-                _imageEditor.at(activeImageEditor)->currentLeftColor = _colorPicker.getLeft();
-                _imageEditor.at(activeImageEditor)->currentRightColor = _colorPicker.getRight();
+                for (int8_t i = 0; i < c_colorCount; i++)
+                    _imageEditor.at(activeImageEditor)->currentColor.at(i) = _colorPicker.getColor(i);
             }
             else if (hoveredImageEditor != -1)
             {
-                _imageEditor.at(hoveredImageEditor)->currentLeftColor = _colorPicker.getLeft();
-                _imageEditor.at(hoveredImageEditor)->currentRightColor = _colorPicker.getRight();
+                for (int8_t i = 0; i < c_colorCount; i++)
+                    _imageEditor.at(hoveredImageEditor)->currentColor.at(i) = _colorPicker.getColor(i);
             }
             else if (activeImageEditor != -1)
             {
-                _imageEditor.at(activeImageEditor)->currentLeftColor = _colorPicker.getLeft();
-                _imageEditor.at(activeImageEditor)->currentRightColor = _colorPicker.getRight();
+                for (int8_t i = 0; i < c_colorCount; i++)
+                    _imageEditor.at(activeImageEditor)->currentColor.at(i) = _colorPicker.getColor(i);
             }
         }
         _toolPicker.Draw();
@@ -898,7 +903,7 @@ void glxy::App::app()
         LayerPicker::Return result = _layerPicker.Draw(popUpState);
         switch (result)
         {
-        case LayerPicker::Return::Visibility: _imageEditor.at(activeImageEditor)->chunkManager.RerenderAllVisibleChunks(); break;
+        case LayerPicker::Return::Visibility: _imageEditor.at(activeImageEditor)->chunkManager.RenderChunkArea(); break;
         case LayerPicker::Return::AddLayer: _imageEditor.at(activeImageEditor)->OptionCreateLayer(); break;
         case LayerPicker::Return::DeleteLayer: _imageEditor.at(activeImageEditor)->OptionDeleteLayer(); break;
         case LayerPicker::Return::DuplicateLayer: _imageEditor.at(activeImageEditor)->OptionDuplicateLayer(); break;

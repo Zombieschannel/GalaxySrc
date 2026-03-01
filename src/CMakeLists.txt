@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.15)
 set(APP_NAME "Galaxy")
-set(APP_VERSION "0.1.0")
+set(APP_VERSION "0.1.1")
 set(APP_IDENTIFIER "com.Zombieschannel.Galaxy")
 
 #FILES
@@ -84,10 +84,21 @@ elseif(MACOS)
 
     target_include_directories(${PROJECT_NAME} PRIVATE ../imgui ../stb_image)
 
+elseif(ANDROID)
+
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -u ANativeActivity_onCreate")
+    set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RELEASE)
+    set(PATH_TO_SFML ${ANDROID_NDK}/sources/third_party/sfml)
+    set(SFML_DIR ${PATH_TO_SFML}/lib/${ANDROID_ABI}/cmake/SFML)
+    find_package(SFML 3.0 COMPONENTS System Window Graphics Main)
+    add_library(${PROJECT_NAME} SHARED ${Project_SOURCES} ${Imgui_SOURCES} ${Whereami_SOURCES})
+    target_include_directories(${PROJECT_NAME} PRIVATE ../imgui ../stb_image)
+
 endif()
 
 if (ANDROID)
     target_compile_definitions(${PROJECT_NAME} PRIVATE SFML_MOBILE)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE SFML_OPENGL_ES)
 else()
     target_compile_definitions(${PROJECT_NAME} PRIVATE SFML_DESKTOP)
 endif()
@@ -103,5 +114,13 @@ elseif(LINUX)
     target_link_libraries(${PROJECT_NAME} ${LINK_SFML} -lGL -lX11)
 elseif(MACOS)
     target_link_libraries(${PROJECT_NAME} ${LINK_SFML} "-framework OpenGL")
+elseif(ANDROID)
+    target_link_libraries(${PROJECT_NAME}
+            log
+            android
+            ${LINK_SFML}
+            -Wl,--whole-archive SFML::Main -Wl,--no-whole-archive
+            EGL
+            GLESv2)
 endif()
 

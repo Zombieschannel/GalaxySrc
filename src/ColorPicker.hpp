@@ -1,29 +1,26 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include "Const.hpp"
 #include "imgui.h"
 #include "Namespace.hpp"
 using namespace sf;
 
 class ColorPicker
 {
-    ImVec4 left;
-    ImVec4 right;
-    ImVec4 oldLeft;
-    ImVec4 oldRight;
+    array<ImVec4, c_colorCount> colors;
+    array<ImVec4, c_colorCount> oldColors;
     bool colorChanged;
-    bool editingLeft = true;
+    int8_t editingColor = 0;
 
     const float& GUIScale;
     const Window& window;
     const bool& rulerEnabled;
 public:
     ColorPicker(const Window& window, const float& GUIScale, const bool& rulerEnabled);
-    ImVec4 getLeft() const;
-    ImVec4 getRight() const;
+    ImVec4 getColor(int8_t ID) const;
     ImVec4 getEditingColor() const;
     bool hasColorChanged() const;
-    void setLeft(const ImVec4& color);
-    void setRight(const ImVec4& color);
-    void setEditorColors(const ImVec4& left, const ImVec4& right);
+    void setColor(int8_t ID, const ImVec4& color);
+    void setEditorColors(int8_t ID, const ImVec4& color);
     void Draw();
 };

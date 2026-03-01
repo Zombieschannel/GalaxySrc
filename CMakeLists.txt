@@ -7,6 +7,8 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(LINUX TRUE)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(MACOS TRUE)
+else(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    set(ANDROID TRUE)
 endif()
 
 #SFML SHARED LIBRARY

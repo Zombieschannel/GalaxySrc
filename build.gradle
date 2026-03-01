@@ -1,0 +1,81 @@
+plugins {
+    id 'com.android.application' version '7.4.2' apply true
+}
+
+android {
+    defaultConfig {
+        applicationId "com.Zombieschannel.Galaxy"
+        versionCode 11
+        versionName "0.1.1"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags ""
+                arguments "-DANDROID_STL=c++_static"
+                abiFilters 'armeabi-v7a', "arm64-v8a", "x86", "x86_64"
+            }
+        }
+        targetSdk 34
+        minSdk 22
+    }
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    splits {
+        abi {
+            enable true
+            reset()
+            include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+            universalApk true
+        }
+    }
+
+    buildTypes {
+        release {
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+            externalNativeBuild {
+                cmake {
+                    cppFlags "-O2"
+                }
+            }
+        }
+        debug {
+            externalNativeBuild {
+                cmake {
+                    cppFlags ""
+                }
+            }
+            versionNameSuffix "-d"
+            applicationIdSuffix '.debug'
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path file('CMakeLists.txt')
+        }
+    }
+    buildToolsVersion '35.0.0'
+    ndkVersion '25.1.8937393'
+    compileSdk 34
+    namespace 'com.Zombieschannel.Galaxy'
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            res {
+                srcDirs 'res'
+            }
+            assets {
+                srcDirs 'assets'
+            }
+
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.5.1'
+}

@@ -5,7 +5,7 @@
 #include <SFML/OpenGL.hpp>
 #include "Themes.hpp"
 
-#define BUILDNUMBER 2245
+#define BUILDNUMBER 2261
 void glxy::App::PopUp()
 {
     if (popUpState.empty())
@@ -21,7 +21,7 @@ void glxy::App::PopUp()
     static float transformImageRotation = 0;
     static bool transformImageTile = false;
     bool reRender = false;
-    const std::array popUpSize = {
+    const array popUpSize = {
         Vector2f(550, 450), //Settings
         Vector2f(630, 360), //About
         Vector2f(690, 540), //Changelog
@@ -46,7 +46,11 @@ void glxy::App::PopUp()
         case PopUpState::TransformImage:
             reRender = true;
             if (_imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer())
-                _imageEditor.at(activeImageEditor)->transformImageOriginalPosition = _imageEditor.at(activeImageEditor)->pixelSelect.getFinalSelectionBounds()->position;
+            {
+                assert(!_imageEditor.at(activeImageEditor)->pixelSelect.getFinalSelectionBounds().expired());
+                const IntRect final = *_imageEditor.at(activeImageEditor)->pixelSelect.getFinalSelectionBounds().lock();
+                _imageEditor.at(activeImageEditor)->transformImageOriginalPosition = final.position;
+            }
             else
                 _imageEditor.at(activeImageEditor)->transformImageOriginalPosition = Vector2i();
             break;
@@ -166,12 +170,12 @@ void glxy::App::PopUp()
                     if (editor->chunkManager.hasSelectionLayer())
                     {
                         if (editor->transformImageSelectionArea != IntRect())
-                            editor->pixelSelect.UpdateTexture(editor->transformImageSelectionArea);
+                            editor->pixelSelect.UpdateTexture(getUnion(&editor->transformImageSelectionArea, &rect));
                         else
-                            editor->pixelSelect.UpdateTexture(IntRect(editor->transformImageOriginalPosition, Vector2i(editor->tempImage->getSize())));
+                            editor->pixelSelect.UpdateTexture(rect);
                     }
                     editor->transformImageSelectionArea = rect;
-                    editor->chunkManager.RerenderAllVisibleChunks();
+                    editor->chunkManager.RenderChunkArea();
                 }
             }
             ImGui::EndChild();
@@ -339,12 +343,12 @@ void glxy::App::PopUp()
             {
                 ImGui::InputText("Layer name"_C, &_layerPicker.getLayer().name[0], _layerPicker.getLayer().name.size() + 1, ImGuiInputTextFlags_CallbackResize, TextCallback, &_layerPicker.getLayer().name);
                 if (ImGui::Checkbox("Enabled"_C, &_layerPicker.getLayer().enabled))
-                    _imageEditor.at(activeImageEditor)->chunkManager.RerenderAllChunks();
+                    _imageEditor.at(activeImageEditor)->chunkManager.RenderChunkArea();
                 int32_t value = _layerPicker.getLayer().transparency;
                 if (ImGui::SliderInt("Transparency"_C, &value, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp))
                 {
                     _layerPicker.getLayer().transparency = value;
-                    _imageEditor.at(activeImageEditor)->chunkManager.RerenderAllChunks();
+                    _imageEditor.at(activeImageEditor)->chunkManager.RenderChunkArea();
                 }
                 if (ImGui::BeginCombo("Blend mode"_C, LL::ind("blendModeName[]", _layerPicker.getLayer().blendMode).c_str()))
                 {
@@ -352,7 +356,7 @@ void glxy::App::PopUp()
                         if (ImGui::Selectable(LL::ind("blendModeName[]", i).c_str()))
                         {
                             _layerPicker.getLayer().blendMode = i;
-                            _imageEditor.at(activeImageEditor)->chunkManager.RerenderAllChunks();
+                            _imageEditor.at(activeImageEditor)->chunkManager.RenderChunkArea();
                         }
                     ImGui::EndCombo();
                 }
@@ -472,7 +476,7 @@ void glxy::App::PopUp()
         case PopUpState::New:
         {
             static int32_t background = 0;
-            const std::array colors = {
+            const array colors = {
                 Color::White,
                 Color::Black,
                 Color::Transparent,
@@ -547,7 +551,7 @@ void glxy::App::PopUp()
                 ImGui::PopStyleColor();
                 if (i % 2 == 0)
                     ImGui::SameLine();
-                if (hovered && InputEvent::isButtonReleased(Mouse::Button::Left))
+                if (hovered && (InputEvent::isButtonReleased(Mouse::Button::Left) || InputEvent::isTouchReleased(0)))
                 {
                     switch (i)
                     {
@@ -660,7 +664,7 @@ void glxy::App::PopUp()
         }
         case PopUpState::Settings:
         {
-            static std::array bgColor = { settings.bgColor.r / 255.f, settings.bgColor.g / 255.f, settings.bgColor.b / 255.f };
+            static array bgColor = { settings.bgColor.r / 255.f, settings.bgColor.g / 255.f, settings.bgColor.b / 255.f };
             static int8_t pressedID = -1;
             static bool editing = false;
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))

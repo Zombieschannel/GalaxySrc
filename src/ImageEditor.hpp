@@ -42,8 +42,7 @@ namespace glxy
 
         const ToolPicker& _toolPicker;
         Tool currentTool = Tool::Pencil;
-        ImVec4 currentLeftColor;
-        ImVec4 currentRightColor;
+        array<ImVec4, c_colorCount> currentColor;
 
         LayerPicker& _layerPicker;
         PixelSelect pixelSelect;
@@ -80,7 +79,7 @@ namespace glxy
         bool moveSelection = false;
         unique_ptr<Image> tempImage;
         IntRect moveSelectionArea;
-        Vector2i moveSelectionOriginalPosition;
+        unique_ptr<Vector2i> moveSelectionOriginalPosition;
         unique_ptr<Transformable> moveSelectionTransform;
         vector<EditorUIElement> moveSelectionPoints;
         EditorUIElement moveSelectionMove;

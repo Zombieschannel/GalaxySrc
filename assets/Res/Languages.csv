@@ -4,116 +4,116 @@ PopUpTitle[2],Changelog,Änderungsprotokoll
 PopUpTitle[3],Future plans,Zukunftspläne
 PopUpTitle[4],Galaxy is working...,Galaxy arbietet...
 PopUpTitle[5],OpenGL info,OpenGL info
-PopUpTitle[6],New image,
-PopUpTitle[7],Save image,
-PopUpTitle[8],Open image,
-PopUpTitle[9],Layer properties,
-PopUpTitle[10],Resize,
-PopUpTitle[11],Resize canvas,
-PopUpTitle[12],Setup,
-PopUpTitle[13],Transform image,
+PopUpTitle[6],New image,Neues Bild
+PopUpTitle[7],Save image,Bild speichern
+PopUpTitle[8],Open image,Bild öffnen
+PopUpTitle[9],Layer properties,Ebeneneigenschaften
+PopUpTitle[10],Resize,Größe ändern
+PopUpTitle[11],Resize canvas,Arbeitsfläche ändern
+PopUpTitle[12],Setup,Einrichtung
+PopUpTitle[13],Transform image,Bild transformieren
 PopUpTitle[14],Save before exit?,
 PopUpTitle[15],Save before close?,
 OtherType[0],Changelog,Änderungsprotokoll
 OtherType[1],</> Future plans,</> Zukunftspläne
 OtherType[2],OpenGL info,OpenGL Info
 OtherType[3],About,Über
-fileMenu[0],New image,
-fileMenu[1],Open image,
-fileMenu[2],Save image,
-fileMenu[3],Save image as,
+fileMenu[0],New image,Neues Bild
+fileMenu[1],Open image,Bild öffnen
+fileMenu[2],Save image,Bild speichern
+fileMenu[3],Save image as,Bild speichern als
 fileMenu[4],Exit,Verlassen
 ThemeType[0],Turquoise leaf,Türkis
 ThemeType[1],Laser red,Laserrot
 ThemeType[2],Midnight,Mitternacht
 ThemeType[3],Dark,Dunkel
-shortcut[0],New image,
-shortcut[1],Save image,
+shortcut[0],New image,Neues Bild
+shortcut[1],Save image,Bild speichern
 shortcut[2],Open settings,Einstellungen öffne
 shortcut[3],Toggle fullscreen,Vollbild ein-/ausschalten
 shortcut[4],Show about,Info anzeigen
-shortcut[5],Zoom in,
-shortcut[6],Zoom out,
-shortcut[7],Save image as,
-shortcut[8],Resize,
-shortcut[9],Resize canvas,
-shortcut[10],Copy,
-shortcut[11],Paste,
-shortcut[12],Select all,
-shortcut[13],Delete,
-shortcut[14],Open image,
-shortcut[15],Cut,
-shortcut[16],Deselect all,
-shortcut[17],Transform image,
-setupOption[0],New image,
-setupOption[1],Open,
+shortcut[5],Zoom in,hineinzoomen
+shortcut[6],Zoom out,herauszoomen
+shortcut[7],Save image as,Bild speichern als
+shortcut[8],Resize,Größe ändern
+shortcut[9],Resize canvas,Arbeitsfläche ändern
+shortcut[10],Copy,Kopieren
+shortcut[11],Paste,Einfügen
+shortcut[12],Select all,Alles auswählen
+shortcut[13],Delete,Löschen
+shortcut[14],Open image,Bild öffnen
+shortcut[15],Cut,Ausschneiden
+shortcut[16],Deselect all,Auswahl aufheben
+shortcut[17],Transform image,Bild transformieren
+setupOption[0],New image,Neues Bild
+setupOption[1],Open,Öffnen
 setupOption[2],Settings,Einstellungen
-editMenu[0],Copy,
-editMenu[1],Cut,
-editMenu[2],Paste,
-editMenu[3],Select all,
-editMenu[4],Deselect all,
-editMenu[5],Delete,
-viewMenu[0],Zoom in,
-viewMenu[1],Zoom out,
-viewMenu[2],Zoom,
-viewMenu[3],Grid,
-viewMenu[4],Ruler,
-viewMenu[5],Actual size,
-viewMenu[6],Sync image viewports,
-imageMenu[0],Crop to selection,
-imageMenu[1],Resize,
-imageMenu[2],Resize canvas,
-imageMenu[3],Flip horizontal,
-imageMenu[4],Flip vertical,
-imageMenu[5],Rotate 90° CW,
-imageMenu[6],Rotate 90° CCW,
-imageMenu[7],Rotate 180°,
-imageMenu[8],Transform image,
-layerMenu[0],Add new layer,
-layerMenu[1],Delete layer,
-layerMenu[2],Duplicate layer,
-layerMenu[3],Move layer up,
-layerMenu[4],Move layer down,
-layerMenu[5],Merge layer down,
-layerMenu[6],Flip layer horizontal,
-layerMenu[7],Flip layer vertical,
-layerMenu[8],Layer properties,
-toolName[0],Box select,
-toolName[1],Circle select,
-toolName[2],Zoom,
-toolName[3],Pan,
-toolName[4],Move selected,
-toolName[5],Magic wand,
-toolName[6],Pencil,
-toolName[7],Picker,
-toolName[8],Brush,
-toolName[9],Eraser,
-toolName[10],Bucket,
-toolName[11],Gradient,
+editMenu[0],Copy,Kopieren
+editMenu[1],Cut,Ausschneiden
+editMenu[2],Paste,Einfügen
+editMenu[3],Select all,Alles auswählen
+editMenu[4],Deselect all,Auswahl aufheben
+editMenu[5],Delete,Löschen
+viewMenu[0],Zoom in,hineinzoomen
+viewMenu[1],Zoom out,herauszoomen
+viewMenu[2],Zoom,Zoomen
+viewMenu[3],Grid,Raster
+viewMenu[4],Ruler,Lineal
+viewMenu[5],Actual size,Originalgröße
+viewMenu[6],Sync image viewports,Bildansichten synchronisieren
+imageMenu[0],Crop to selection,Auf Auswahl zuschneiden
+imageMenu[1],Resize,Größe ändern
+imageMenu[2],Resize canvas,Arbeitsfläche ändern
+imageMenu[3],Flip horizontal,Horizontal spiegeln
+imageMenu[4],Flip vertical,Vertikal spiegeln
+imageMenu[5],Rotate 90° CW,90° im Uhrzeigersinn drehen
+imageMenu[6],Rotate 90° CCW,90° gegen den Uhrzeigersinn drehen
+imageMenu[7],Rotate 180°,180° drehen
+imageMenu[8],Transform image,Bild transformieren
+layerMenu[0],Add new layer,Neue Ebene hinzufügen
+layerMenu[1],Delete layer,Ebene löschen
+layerMenu[2],Duplicate layer,Ebene duplizieren
+layerMenu[3],Move layer up,Ebene nach oben verschieben
+layerMenu[4],Move layer down,Ebene nach unten verschieben
+layerMenu[5],Merge layer down,Mit der darunterliegenden Ebene zusammenführen
+layerMenu[6],Flip layer horizontal,Ebene horizontal spiegeln
+layerMenu[7],Flip layer vertical,Ebene vertikal spiegeln
+layerMenu[8],Layer properties,Ebeneneigenschaften
+toolName[0],Box select,Rechteckige Auswahl
+toolName[1],Circle select,Kreis Auswahl
+toolName[2],Zoom,Zoomen
+toolName[3],Pan,Schwenken
+toolName[4],Move selected,Ausgewählte verschieben
+toolName[5],Magic wand,Zauberstab
+toolName[6],Pencil,Bleistift
+toolName[7],Picker,Farbpicker
+toolName[8],Brush,Pinsel
+toolName[9],Eraser,Radiergummi
+toolName[10],Bucket,Füllwerkzeug
+toolName[11],Gradient,Verlauf
 blendModeName[0],Blend none,Blend kein
 blendModeName[1],Blend add,Blend hinzufügen
 blendModeName[2],Blend alpha,Blend alpha
 blendModeName[3],Blend multiply,Blend multiplizieren
-resamplingMethod[0],Triangle (Bilinear)
-resamplingMethod[1],Filter box
-resamplingMethod[2],Catmull-Rom (Bicubic)
-resamplingMethod[3],Mitchell-Netravalli (Bicubic Smooth)
-resamplingMethod[4],Cubic spline (Bicubic Ultra smooth)
-resamplingMethod[5],Point Sample (Nearest neighbour)
-boxSelectMode[0],Single,
-boxSelectMode[1],Add,
-boxSelectMode[2],Subtract,
-layerToolTip[0],Add layer,
-layerToolTip[1],Delete layer,
-layerToolTip[2],Duplicate layer,
-layerToolTip[3],Move layer up,
-layerToolTip[4],Move layer down,
-layerToolTip[5],Merge layer down,
-layerToolTip[6],Layer properties,
-panMouseButton[0],Middle button,Middle button,
-panMouseButton[1],Extra button 1,Extra button 1,
-panMouseButton[2],Extra button 2,Extra button 2,
+resamplingMethod[0],Triangle (Bilinear),Dreieck (Bilinear)
+resamplingMethod[1],Filter box,Filterbox
+resamplingMethod[2],Catmull-Rom (Bicubic),Catmull-Rom (Bikubisch)
+resamplingMethod[3],Mitchell-Netravalli (Bicubic Smooth),Mitchell-Netravalli (Bikubisch glatt)
+resamplingMethod[4],Cubic spline (Bicubic Ultra smooth),Kubischer Spline (Bikubisch ultra glatt)
+resamplingMethod[5],Point Sample (Nearest neighbour),Punktabgleich (Nächster Nachbar)
+boxSelectMode[0],Single,Einzeln
+boxSelectMode[1],Add,Hinzufügen
+boxSelectMode[2],Subtract,Subtrahieren
+layerToolTip[0],Add layer,Ebene hinzufügen
+layerToolTip[1],Delete layer,Ebene löschen
+layerToolTip[2],Duplicate layer,Ebene duplizieren
+layerToolTip[3],Move layer up,Ebene nach oben verschieben
+layerToolTip[4],Move layer down,Ebene nach unten verschieben
+layerToolTip[5],Merge layer down,Mit der darunterliegenden Ebene zusammenführen
+layerToolTip[6],Layer properties,Ebeneneigenschaften
+panMouseButton[0],Middle button,
+panMouseButton[1],Extra button 1,
+panMouseButton[2],Extra button 2,
 Pan mouse button,Pan mouse button,
 Draw inner selection lines,Draw inner selection lines,
 Unsaved files,Unsaved files,
@@ -123,49 +123,49 @@ Best pixel fit,Best pixel fit,
 Best fit,Best fit,
 Selected area,Selected area,
 Box area,Box area,
-Left color,Left color,
-Left preview,Left preview,
-Left,Left,
-Right color,Right color,
-Right preview,Right preview,
-Right,Right,
-Color Picker,Color Picker,
-Tool Picker,Tool Picker,
-Layers,Layers,
-Position,Position,
-Rotation,Rotation,
-Scale,Scale,
-Origin,Origin,
-Tileable,Tileable,
-Show framerate,Show framerate,
-Deselect,Deselect,
-Nothing here,Nothing here,
-From file,From file,
-Recent,Recent,
-Finish,Finish,
-Tolerance,Tolerance,
-Edit,Edit,
-Select mode,Select mode,
-Resampling method,Resampling method,
-Height,Height,
-Width,Width,
-Maintain aspect ratio,Maintain aspect ratio,
-Percentage,Percentage,
-By percentage,By percentage,
-By absolute size,By absolute size,
-Quality,Quality,
-Blend mode,Blend mode,
-Transparency,Transparency,
-Layer name,Layer name,
-Enabled,Enabled,
-Effects,Effects,
-Adjustments,Adjustments,
-Layers,Layers,
-Image,Image,
-View,View,
-Cursor,Cursor,
-Radius,Radius,
-Tool,Tool,
+Left color,Left color,Linke Farbe
+Left preview,Left preview,Linke Vorschau
+Left,Left,Links
+Right color,Right color,Rechte Farbe
+Right preview,Right preview,Rechte Vorschau
+Right,Right,Rechts
+Color Picker,Color Picker,Farbpicker
+Tool Picker,Tool Picker,Werkzeugauswahl
+Layers,Layers,Ebenen
+Position,Position,Position
+Rotation,Rotation,Rotation
+Scale,Scale,Skalierung
+Origin,Origin,Ursprung
+Tileable,Tileable,Kachelbar
+Show framerate,Show framerate,Bildrate anzeigen
+Deselect,Deselect,Abwählen
+Nothing here,Nothing here,Nichts hier
+From file,From file,Aus Datei
+Recent,Recent,Kürzlich
+Finish,Finish,Beenden
+Tolerance,Tolerance,Toleranz
+Edit,Edit,Bearbeiten
+Select mode,Select mode,Auswahlmodus
+Resampling method,Resampling method,Resampling-Methode
+Height,Height,Höhe
+Width,Width,Breite
+Maintain aspect ratio,Maintain aspect ratio,Seitenverhältnis beibehalten
+Percentage,Percentage,Proezntteil
+By percentage,By percentage,Nach Prozent
+By absolute size,By absolute size,Nach absoluter Größe
+Quality,Quality,Qualität
+Blend mode,Blend mode,Füllmethode
+Transparency,Transparency,Transparenz
+Layer name,Layer name,Schichtname
+Enabled,Enabled,Aktiviert
+Effects,Effects,Effekte
+Adjustments,Adjustments,Anpassungen
+Layers,Layers,Schichten
+Image,Image,Bild
+View,View,Ansicht
+Cursor,Cursor,Cursor
+Radius,Radius,Radius
+Tool,Tool,Werkzeug
 Version,Version,Version
 File,File,Datei
 Settings,Settings,Einstellungen
@@ -192,27 +192,27 @@ Enable touchpad support,Enable touchpad support,Touchpad-Unterstützung einschal
 Background color,Background color,Hintergrundfarbe
 Animations,Animations,Animationen
 Animate zoom,Animate zoom,Zoom animieren
-Animate pan,Animate pan,
+Animate pan,Animate pan,Pan animieren
 Shortcuts,Shortcuts,Tastenkombinationen
 Apply,Apply,Anwenden
 Clear,Clear,Löschen
 Saved,Saved,Gespeichert
-Resolution,Resolution,
-Background,Background,
-White,White,
-Black,Black,
-Transparent,Transparent,
-Cancel,Cancel,
-Filename,Filename,
-Extension,Extension,
-glxyWarning1,Image with the same name already exists!,
+Resolution,Resolution,Resolution
+Background,Background,Hintergrund
+White,White,Weiß
+Black,Black,Schwarz
+Transparent,Transparent,Transparent
+Cancel,Cancel,Abbrechen
+Filename,Filename,Dateiname
+Extension,Extension,Dateiendung
+glxyWarning1,Image with the same name already exists!,Ein Bild mit dem gleichen Namen existiert bereits!
 glxyWarning2,Image has unsaved changes!,
 glxyTooltip1,Makes the refresh rate of the editor match your monitor refresh rate. Ex. 60Hz/144Hz.. Also should remove screen tearing.,Stellt die Bildwiederholfrequenz des Editors auf die Ihres Monitors ein. Zum Beispiel 60 Hz / 144 Hz... Sollte auch Bildschirm-Tearing verhindern.
 glxyTooltip2,"Change if you want more or less than 60 frames per second. Min is 5, max is 1000.","Ändern Sie dies, wenn Sie mehr oder weniger als 60 Bilder pro Sekunde wünschen. Der Mindestwert ist 5, der Maximalwert ist 1000."
 glxyTooltip3,Used to smooth out sharp edges in viewport. Quite resource heavy.,"Wird verwendet, um scharfe Kanten im Viewport zu glätten. Ist ziemlich ressourcenintensiv."
 glxyTooltip4,Updates the editor only when the window is active. Makes the editor less resource heavy when running in the background.,"Aktualisiert den Editor nur, wenn das Fenster aktiv ist. Macht den Editor ressourcenschonender, wenn er im Hintergrund läuft."
 glxyAbout1,"Galaxy is an image editor made in C++ using SFML, ImGui, stb_image.",
-glxyAbout2,Inspired by Paint.NET and Pinta.,
+glxyAbout2,Inspired by Paint.NET and Pinta.,Inspiriert von Paint.NET und Pinta.
 glxyAbout3,Translators:,Übersetzer:
 glxyAbout4,English: Zombieschannel,Englisch: Zombieschannel
 glxyAbout5,German: Vito,Deutsch: Vito

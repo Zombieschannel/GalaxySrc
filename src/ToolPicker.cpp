@@ -41,7 +41,7 @@ void ToolPicker::Draw()
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(t.x, t.y, t.z, 0.8f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Vector2f(3, 2));
 
-    const std::array toolColors = {
+    const array toolColors = {
         Color(83, 170, 17), Color(170, 163, 17), Color(17, 170, 138), Color(170, 135, 17),
         Color(17, 170, 87), Color(170, 75, 17), Color(170, 103, 17), Color(17, 65, 170),
         Color(113, 17, 170), Color(170, 17, 155), Color(170, 17, 36), Color(170, 17, 64)

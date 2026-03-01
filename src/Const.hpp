@@ -4,7 +4,7 @@
 #include "Namespace.hpp"
 using namespace sf;
 
-const std::array<uint8_t, 3> c_versionNumber = {0, 1, 0};
+const array<uint8_t, 3> c_versionNumber = {0, 1, 1};
 
 #ifdef SFML_X86
 static const string c_SFML_ARCH = "x86";
@@ -38,9 +38,11 @@ static const float c_UIElementSize = 0.01f;
 static const float c_rulerSize = 15.f;
 static const int8_t c_maxRecentFiles = 15;
 static const int16_t c_maxLayers = 10000;
-
-static const std::array<string, 2> c_languageNames = { "English", "Deutsch" };
-
+#ifdef SFML_DESKTOP
+static const int8_t c_colorCount = 2;
+#else
+static const int8_t c_colorCount = 1;
+#endif
 static const uint32_t c_noChangeReturnColor = 0x505050FF;
 
 static const uint8_t c_keyViewMove = 30;
@@ -48,14 +50,14 @@ static const uint8_t c_edgeViewMove = 100;
 static const uint8_t c_edgeViewMoveFaster = 200;
 static const float c_touchPadViewMove = 50.f;
 
-static const std::array c_blendModes = {
+static const array c_blendModes = {
         BlendMode(BlendMode::Factor::One, BlendMode::Factor::Zero),
         BlendMode(BlendMode::Factor::SrcAlpha, BlendMode::Factor::One, BlendMode::Equation::Add, BlendMode::Factor::One, BlendMode::Factor::One, BlendMode::Equation::Add),
         BlendMode(BlendMode::Factor::SrcAlpha, BlendMode::Factor::OneMinusSrcAlpha, BlendMode::Equation::Add, BlendMode::Factor::One, BlendMode::Factor::OneMinusSrcAlpha, BlendMode::Equation::Add),
         BlendMode(BlendMode::Factor::DstColor, BlendMode::Factor::Zero)
 };
 
-static const std::array<string, 4> c_imageExtensions = {".png", ".jpg", ".bmp", ".tga"};
+static const array<string, 4> c_imageExtensions = {".png", ".jpg", ".bmp", ".tga"};
 
 static const string c_futurePlan =
 R"(Future plans - everything below is subject to change
@@ -71,6 +73,15 @@ R"(Future plans - everything below is subject to change
 )";
 
 static const string c_changelog =
-R"(The initial version - 0.1.0 (1. Mar 2026)
+R"(Small bugfix update - 0.1.1 (3. Mar 2026)
+-Escape key can be used for canceling operations in the subtitle bar
+-Wand fill automatically finishes after selecting new position similar to bucket fill
+-Fixed incorrect blending when pasting copied image
+-Fixed selection chunks not being updated with wand select after changing tolerance or position
+-Fixed crash on copy image after resizing canvas in any way
+-Fixed crash on delete selected/copy image with selection out of bounds
+-Fixed crash on select all
+
+The initial version - 0.1.0 (1. Mar 2026)
 -No changelog available
 )";

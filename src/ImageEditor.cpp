@@ -67,8 +67,8 @@ glxy::ImageEditor::ImageEditor(AppSettings& settings, Window& window, vector<Pop
     squareOuterOutline.setFillColor(Color::Transparent);
     squareOuterOutline.setSize(Vector2f(1.f, 1.f));
 
-    currentLeftColor = colorPicker.getLeft();
-    currentRightColor = colorPicker.getRight();
+    for (int8_t i = 0; i < c_colorCount; i++)
+        currentColor.at(i) = colorPicker.getColor(i);
 
     Image transparent;
     transparent.resize(Vector2u(2, 2), Color::White);
@@ -108,7 +108,7 @@ bool glxy::ImageEditor::Open(const filesystem::path& target)
         view.setCenter(Vector2f(getSize()) / 2.f);
         viewUI.setCenter(Vector2f(0.5f, 0.5f));
         cameraTargetPos = view.getCenter();
-        chunkManager.RerenderAllVisibleChunks();
+        chunkManager.RenderChunkArea();
         updateLayerPreview(_layerPicker.getLayerIDSelected());
         return true;
     }
@@ -226,12 +226,12 @@ void glxy::ImageEditor::UpdateTool()
         OptionSetBrushSize(_toolPicker.eraserRadius);
     if (_toolPicker.wasUserChanged() && currentTool == Tool::MoveSelection)
     {
-        const IntRect* bounds = pixelSelect.getFinalSelectionBounds();
-        if (bounds)
+        if (!pixelSelect.getFinalSelectionBounds().expired())
         {
+            const IntRect bounds = *pixelSelect.getFinalSelectionBounds().lock();
             moveSelectionTransform = make_unique<Transformable>();
-            moveSelectionTransform->setPosition(Vector2f(bounds->position));
-            moveSelectionOriginalPosition = bounds->position;
+            moveSelectionTransform->setPosition(Vector2f(bounds.position));
+            moveSelectionOriginalPosition = make_unique<Vector2i>(bounds.position);
             SetupMovePixelsUI();
         }
     }
@@ -243,8 +243,8 @@ void glxy::ImageEditor::UpdateTool()
     if (viewHovered || wasHoveredUponAction)
     {
         Color targetColor;
-        const ImVec4 left = currentLeftColor;
-        const ImVec4 right = currentRightColor;
+        const ImVec4 left = currentColor.at(0);
+        const ImVec4 right = currentColor.at(1);
         wasHoveredUponAction = anyPressed;
         switch (currentTool)
         {
@@ -306,11 +306,11 @@ void glxy::ImageEditor::UpdateTool()
             {
                 if (InputEvent::isButtonPressed(Mouse::Button::Left) && target != left)
                 {
-                    currentLeftColor = target;
+                    currentColor.at(0) = target;
                 }
                 else if (InputEvent::isButtonPressed(Mouse::Button::Right) && target != right)
                 {
-                    currentRightColor = target;
+                    currentColor.at(1) = target;
                 }
             }
             break;
@@ -330,6 +330,9 @@ void glxy::ImageEditor::UpdateTool()
             {
                 if (!bucketFill || bucketFill && bucketFillPosition != Vector2i(pos))
                 {
+                    if (pos.x < 0 || pos.y < 0 || pos.x >= getSize().x || pos.y >= getSize().y)
+                        break;
+
                     if (bucketFill)
                         OptionFinish();
 
@@ -351,23 +354,29 @@ void glxy::ImageEditor::UpdateTool()
             if (wandMove.hasChanged())
             {
                 wandFillPosition += Vector2i(wandMove.getDelta());
+                if (wandFillPosition.x < 0 || wandFillPosition.y < 0 || wandFillPosition.x >= getSize().x || wandFillPosition.y >= getSize().y)
+                    break;
                 const Vector2f clamped = Vector2f(std::clamp(wandFillPosition.x, 0, static_cast<int32_t>(getSize().x - 1)),
-                std::clamp(wandFillPosition.y, 0, static_cast<int32_t>(getSize().y - 1)));
-                pixelSelect.wandClear();
-                pixelSelect.wandSelect(Vector2u(clamped), _toolPicker.selectMode != 2, settings.wandTolerance);
+                    std::clamp(wandFillPosition.y, 0, static_cast<int32_t>(getSize().y - 1)));
+                pixelSelect.wandSelect(Vector2u(clamped), settings.wandTolerance);
             }
             if (anyPressed && !wandMove.isSelected())
             {
                 if (!wandFill || wandFill && wandFillPosition != Vector2i(pos))
                 {
+                    if (pos.x < 0 || pos.y < 0 || pos.x >= getSize().x || pos.y >= getSize().y)
+                        break;
+
+                    if (wandFill)
+                        OptionFinish();
+
                     wandFill = true;
                     wandFillPosition = Vector2i(pos);
                     wandMove.setPosition(Vector2f(wandFillPosition) + Vector2f(0.5f, 0.5f));
                     const Vector2f clamped = Vector2f(std::clamp(pos.x, 0.f, static_cast<float>(getSize().x - 1)),
                         std::clamp(pos.y, 0.f, static_cast<float>(getSize().y - 1)));
                     chunkManager.createSelectionLayer();
-                    pixelSelect.wandClear();
-                    pixelSelect.wandSelect(Vector2u(clamped), _toolPicker.selectMode != 2, settings.wandTolerance);
+                    pixelSelect.wandSelect(Vector2u(clamped), settings.wandTolerance);
                 }
             }
             break;
@@ -375,10 +384,10 @@ void glxy::ImageEditor::UpdateTool()
         case Tool::MoveSelection:
             if (chunkManager.hasSelectionLayer() || pixelSelect.getTempMask())
             {
-                const IntRect* final = pixelSelect.getFinalSelectionBounds();
-                assert(final);
-                moveSelectionMoveArea.setPosition(Vector2f(final->position));
-                moveSelectionMoveArea.setScale(Vector2f(final->size));
+                assert(!pixelSelect.getFinalSelectionBounds().expired());
+                const IntRect final = *pixelSelect.getFinalSelectionBounds().lock();
+                moveSelectionMoveArea.setPosition(Vector2f(final.position));
+                moveSelectionMoveArea.setScale(Vector2f(final.size));
                 moveSelectionMove.Update(texture, pos, posUI);
                 for (int8_t i = 0; i < moveSelectionPoints.size(); i++)
                     moveSelectionPoints.at(i).Update(texture, pos, posUI);
@@ -392,12 +401,12 @@ void glxy::ImageEditor::UpdateTool()
                         moveSelectionPoints.at(i).move(moveSelectionMove.getDelta());
                     if (!moveSelection)
                         SetupMovePixels();
-                    const IntRect* final = pixelSelect.getFinalSelectionBounds();
-                    assert(final);
-                    pixelSelect.setNewBounds(IntRect(final->position + Vector2i(moveSelectionMove.getDelta()), final->size));
+                    assert(!pixelSelect.getFinalSelectionBounds().expired());
+                    const IntRect final = *pixelSelect.getFinalSelectionBounds().lock();
+                    pixelSelect.setNewBounds(IntRect(final.position + Vector2i(moveSelectionMove.getDelta()), final.size));
                     moveSelectionTransform->move(moveSelectionMove.getDelta());
                     GenerateMovePixels();
-                    chunkManager.RerenderAllVisibleChunks();
+                    chunkManager.RenderChunkArea(getUnion(&final, pixelSelect.getFinalSelectionBounds().lock().get()));
                 }
             }
             if (moveSelectionMoveArea.hasChanged())
@@ -409,12 +418,12 @@ void glxy::ImageEditor::UpdateTool()
                     moveSelectionMove.move(moveSelectionMoveArea.getDelta());
                     if (!moveSelection)
                         SetupMovePixels();
-                    const IntRect* final = pixelSelect.getFinalSelectionBounds();
-                    assert(final);
-                    pixelSelect.setNewBounds(IntRect(final->position + Vector2i(moveSelectionMoveArea.getDelta()), final->size));
+                    assert(!pixelSelect.getFinalSelectionBounds().expired());
+                    const IntRect final = *pixelSelect.getFinalSelectionBounds().lock();
+                    pixelSelect.setNewBounds(IntRect(final.position + Vector2i(moveSelectionMoveArea.getDelta()), final.size));
                     moveSelectionTransform->move(moveSelectionMoveArea.getDelta());
                     GenerateMovePixels();
-                    chunkManager.RerenderAllVisibleChunks();
+                    chunkManager.RenderChunkArea(getUnion(&final, pixelSelect.getFinalSelectionBounds().lock().get()));
                 }
             }
             for (int8_t i = 0; i < moveSelectionPoints.size(); i++)
@@ -423,23 +432,23 @@ void glxy::ImageEditor::UpdateTool()
                 {
                     if (!moveSelection)
                         SetupMovePixels();
-                    const IntRect* final = pixelSelect.getFinalSelectionBounds();
-                    assert(final);
+                    assert(!pixelSelect.getFinalSelectionBounds().expired());
+                    const IntRect final = *pixelSelect.getFinalSelectionBounds().lock();
                     IntRect newBounds;
                     const Vector2i delta = Vector2i(moveSelectionPoints.at(i).getDelta());
                     switch (i)
                     {
                     case 0: case 1: case 3:
-                        newBounds = IntRect(final->position + delta, final->size - delta);
+                        newBounds = IntRect(final.position + delta, final.size - delta);
                         break;
                     case 2:
-                        newBounds = IntRect(Vector2i(final->position.x, final->position.y + delta.y), Vector2i(final->size.x + delta.x, final->size.y - delta.y));
+                        newBounds = IntRect(Vector2i(final.position.x, final.position.y + delta.y), Vector2i(final.size.x + delta.x, final.size.y - delta.y));
                         break;
                     case 5:
-                        newBounds = IntRect(Vector2i(final->position.x + delta.x, final->position.y), Vector2i(final->size.x - delta.x, final->size.y + delta.y));
+                        newBounds = IntRect(Vector2i(final.position.x + delta.x, final.position.y), Vector2i(final.size.x - delta.x, final.size.y + delta.y));
                         break;
                     case 4: case 6: case 7:
-                        newBounds = IntRect(final->position, final->size + delta);
+                        newBounds = IntRect(final.position, final.size + delta);
                         break;
                     default:
                         break;
@@ -450,7 +459,7 @@ void glxy::ImageEditor::UpdateTool()
                     moveSelectionTransform->setScale(scale);
                     SetupMovePixelsUI();
                     GenerateMovePixels();
-                    chunkManager.RerenderAllVisibleChunks();
+                    chunkManager.RenderChunkArea(getUnion(&final, &newBounds));
                 }
             }
             break;
@@ -812,10 +821,10 @@ void glxy::ImageEditor::Update()
             break;
         case Tool::MoveSelection:
         {
-            const IntRect* final = pixelSelect.getFinalSelectionBounds();
+            const auto final = pixelSelect.getFinalSelectionBounds();
             IntRect rect = moveSelectionArea;
-            if (rect == IntRect() && final)
-                rect = *final;
+            if (rect == IntRect() && !final.expired())
+                rect = *final.lock();
             if (rect != IntRect())
             {
                 ImGui::Text("%s:", "Selected area"_C);
@@ -963,11 +972,11 @@ void glxy::ImageEditor::SetupMovePixelsUI()
     {
         if (!chunkManager.hasSelectionLayer())
             return;
-        const IntRect* bounds = pixelSelect.getFinalSelectionBounds();
-        assert(bounds);
-        size = bounds->size;
+        assert(!pixelSelect.getFinalSelectionBounds().expired());
+        const IntRect bounds = *pixelSelect.getFinalSelectionBounds().lock();
+        size = bounds.size;
     }
-    const std::array positions = {
+    const array positions = {
         Vector2f(0, 0),
         Vector2f(size.x / 2.f, 0),
         Vector2f(size.x, 0),
@@ -986,22 +995,22 @@ void glxy::ImageEditor::SetupMovePixelsUI()
 
 void glxy::ImageEditor::SetupMovePixels()
 {
-    const IntRect* bounds = pixelSelect.getFinalSelectionBounds();
-    assert(bounds);
-    moveSelectionArea = *bounds;
+    assert(!pixelSelect.getFinalSelectionBounds().expired());
+    const IntRect bounds = *pixelSelect.getFinalSelectionBounds().lock();
+    moveSelectionArea = bounds;
 
     moveSelection = true;
     pixelSelect.createTempSelectionFromSelected();
 
     if (!tempImage)
         tempImage = make_unique<Image>();
-    tempImage->resize(Vector2u(bounds->size), Color::Transparent);
-    for (int32_t x = 0; x < bounds->size.x; x++)
-        for (int32_t y = 0; y < bounds->size.y; y++)
+    tempImage->resize(Vector2u(bounds.size), Color::Transparent);
+    for (int32_t x = 0; x < bounds.size.x; x++)
+        for (int32_t y = 0; y < bounds.size.y; y++)
         {
             if (!pixelSelect.withinTempBounds(Vector2u(x, y)))
                 continue;
-            const Vector2i pos = Vector2i(x, y) + bounds->position;
+            const Vector2i pos = Vector2i(x, y) + bounds.position;
             if (pos.x < 0 || pos.y < 0 || pos.x >= getSize().x || pos.y >= getSize().y)
                 continue;
             tempImage->setPixel(Vector2u(x, y), chunkManager.getPixelColor(Vector2u(pos)));
@@ -1207,9 +1216,9 @@ void glxy::ImageEditor::GradientPixels(const Vector2f startPos, const Vector2f e
         area = IntRect({}, Vector2i(getSize()));
     else
     {
-        const IntRect* final = pixelSelect.getFinalSelectionBounds();
-        assert(final);
-        area = *final;
+        assert(!pixelSelect.getFinalSelectionBounds().expired());
+        const IntRect final = *pixelSelect.getFinalSelectionBounds().lock();
+        area = final;
     }
     if (startPos == endPos)
     {
@@ -1220,7 +1229,7 @@ void glxy::ImageEditor::GradientPixels(const Vector2f startPos, const Vector2f e
                     continue;
                 chunkManager.setPixelTemp(Vector2u(x, y), startColor);
             }
-        chunkManager.RerenderAllVisibleChunks();
+        chunkManager.RenderChunkArea();
         return;
     }
     chunkManager.clearTempLayer(Color::Transparent);
@@ -1245,7 +1254,7 @@ void glxy::ImageEditor::GradientPixels(const Vector2f startPos, const Vector2f e
                 chunkManager.setPixelTemp(Vector2u(x, y), c);
             }
         }
-    chunkManager.RerenderAllVisibleChunks();
+    chunkManager.RenderChunkArea();
 }
 
 void glxy::ImageEditor::ResizeCanvas(const IntRect newSize)
@@ -1269,7 +1278,7 @@ void glxy::ImageEditor::ResizeCanvas(const IntRect newSize)
                     min(newSize.size.y, static_cast<int32_t>(oldSize.y)))), ImageCopyType::Color, i);
         updateLayerPreview(i);
     }
-    chunkManager.RerenderAllChunks();
+    chunkManager.RenderChunkArea();
     ClampView();
     gridLines.manualChange = true;
     rulerUI.manualChange = true;
@@ -1277,7 +1286,7 @@ void glxy::ImageEditor::ResizeCanvas(const IntRect newSize)
 
 void glxy::ImageEditor::RescaleCanvas(const Vector2u newSize, RescaleMethod method)
 {
-    const std::array filters = {
+    const array filters = {
         stb::STBIR_FILTER_TRIANGLE, stb::STBIR_FILTER_BOX, stb::STBIR_FILTER_CATMULLROM, stb::STBIR_FILTER_MITCHELL, stb::STBIR_FILTER_CUBICBSPLINE, stb::STBIR_FILTER_POINT_SAMPLE
     };
     vector<Image> layers;
@@ -1300,7 +1309,7 @@ void glxy::ImageEditor::RescaleCanvas(const Vector2u newSize, RescaleMethod meth
         chunkManager.PasteImage(t, Vector2u(), IntRect(), ImageCopyType::Color, i);
         updateLayerPreview(i);
     }
-    chunkManager.RerenderAllVisibleChunks();
+    chunkManager.RenderChunkArea();
     ClampView();
     gridLines.manualChange = true;
 }
@@ -1314,14 +1323,15 @@ void glxy::ImageEditor::MergeTempLayer()
 {
     chunkManager.MergeTempLayer();
     updateLayerPreview(_layerPicker.getLayerIDSelected());
-    chunkManager.RerenderAllVisibleChunks();
+    chunkManager.RenderChunkArea();
     chunkManager.deleteTempLayer();
 }
 
 void glxy::ImageEditor::AllocateChunks(const Vector2u size)
 {
+    if (chunkManager.hasSelectionLayer())
+        pixelSelect.clear();
     chunkManager.AllocateChunks(size);
-    pixelSelect.setSize(size);
 }
 
 void glxy::ImageEditor::setCursorType(const Cursor::Type cursorType) const

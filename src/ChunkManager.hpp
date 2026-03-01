@@ -70,8 +70,7 @@ namespace glxy
         void RenderNQChunk(int16_t chunkID);
         void UpdateLQChunks();
         void UpdateNQChunks();
-        void RerenderAllVisibleChunks();
-        void RerenderAllChunks();
+        void RenderChunkArea(const IntRect& area = IntRect());
         void MergeTempLayer();
         void CopyImage(Image& target, Vector2u dest, const IntRect& area, ImageCopyType type, int16_t layerID = 0) const;
         void PasteImage(const Image& src, Vector2u dest, const IntRect& area, ImageCopyType type, int16_t layerID = 0);

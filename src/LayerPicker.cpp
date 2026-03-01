@@ -186,7 +186,7 @@ LayerPicker::Return LayerPicker::Draw(vector<PopUpState>& popUpState)
         const uint8_t count = 7;
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, Vector2f(0, 0));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, Vector2f((ImGui::GetContentRegionAvail().x - 25 * GUIScale) / (count - 1) - 25 * GUIScale, 0));
-        const std::array toolColors = {
+        const array toolColors = {
             Color(83, 170, 17), Color(170, 17, 36), Color(170, 163, 17),
             Color(17, 170, 87), Color(17, 170, 138), Color(17, 65, 170),
             Color(170, 75, 17),

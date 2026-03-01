@@ -85,6 +85,8 @@ Image glxy::ChunkManager::renderWholeImage() const
 
 bool glxy::ChunkManager::hasSelectionLayer() const
 {
+    if (imageChunks.empty())
+        return false;
     return imageChunks.front().getSelectionTexture();
 }
 
@@ -382,33 +384,30 @@ void glxy::ChunkManager::UpdateNQChunks()
     }
 }
 
-void glxy::ChunkManager::RerenderAllVisibleChunks()
+void glxy::ChunkManager::RenderChunkArea(const IntRect& area)
 {
+    IntRect renderArea = area;
+    if (area == IntRect())
+        renderArea = IntRect({0, 0}, Vector2i(getSize()));
+    if (!renderArea.findIntersection(IntRect({0, 0}, Vector2i(getSize()))))
+        return;
     const FloatRect drawBox = FloatRect(view.getCenter() - view.getSize() / 2.f, view.getSize());
-    for (uint32_t i = 0; i < imageChunks.size(); i++)
-    {
-        const Vector2u tileID = Vector2u(i % chunkCount.x, i / chunkCount.x);
-        ImageChunk& chunk = imageChunks.at(i);
-        chunk.RenderLowQuality();
-        if (!FloatRect(Vector2f(tileID) * static_cast<float>(getChunkSizeNative()), Vector2f(getChunkSizeNative(), getChunkSizeNative())).findIntersection(drawBox).has_value() || windowScale >= c_chunkSwitch)
+    for (int32_t x = max(0, renderArea.position.x / getChunkSizeNative());
+        x < min(static_cast<float>(getChunkCount().x), ceil(static_cast<float>(renderArea.position.x + renderArea.size.x) / getChunkSizeNative())); x++)
+        for (int32_t y = max(0, renderArea.position.y / getChunkSizeNative());
+            y < min(static_cast<float>(getChunkCount().y), ceil(static_cast<float>(renderArea.position.y + renderArea.size.y) / getChunkSizeNative())); y++)
         {
-            if (chunk.getNativeTexture())
-                chunk.deleteNativeQuality();
-            continue;
-        }
-        chunk.RenderNativeQuality();
-    }
-}
-
-void glxy::ChunkManager::RerenderAllChunks()
-{
-    for (uint32_t i = 0; i < imageChunks.size(); i++)
-    {
-        ImageChunk& chunk = imageChunks.at(i);
-        chunk.RenderLowQuality();
-        if (windowScale < c_chunkSwitch)
+            ImageChunk& chunk = imageChunks.at(x + y * getChunkCount().x);
+            chunk.RenderLowQuality();
+            if (!FloatRect(Vector2f(x, y) * static_cast<float>(getChunkSizeNative()),
+                Vector2f(getChunkSizeNative(), getChunkSizeNative())).findIntersection(drawBox).has_value() || windowScale >= c_chunkSwitch)
+            {
+                if (chunk.getNativeTexture())
+                    chunk.deleteNativeQuality();
+                continue;
+            }
             chunk.RenderNativeQuality();
-    }
+        }
 }
 
 void glxy::ChunkManager::MergeTempLayer()

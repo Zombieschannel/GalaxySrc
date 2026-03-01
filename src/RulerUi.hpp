@@ -4,9 +4,9 @@
 using namespace sf;
 class RulerUI : public Drawable
 {
-    std::array<Vertex, 6> blackBg;
-    std::array<Vertex, 4> selectionX;
-    std::array<Vertex, 4> selectionY;
+    array<Vertex, 6> blackBg;
+    array<Vertex, 4> selectionX;
+    array<Vertex, 4> selectionY;
     vector<Text> labels;
     VertexArray vertexArray;
     VertexBuffer buffer;

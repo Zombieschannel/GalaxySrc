@@ -34,11 +34,10 @@ namespace glxy
         Vector2i tempSelectedAreaPosition;
         pair<IntRect, bool> selectShape; // bounding box of current shape selection
         IntRect selectWand; //bounding box of wand selection while not finished
-        unique_ptr<IntRect> finalBounds; // bounding box of everything
-        Image selectedWand;
+        shared_ptr<IntRect> finalBounds; // bounding box of everything
+        unique_ptr<Image> selectedWand;
+        unique_ptr<pair<Vector2u, int8_t>> wandCache;
         ShapeSelectType shapeSelectType;
-
-        bool selectionActive = false;
 
         Vector2u startPos;
         Color selectColor;
@@ -51,22 +50,21 @@ namespace glxy
         Vector2u endPos = Vector2u(-1, -1);
         PixelSelect(const float& windowScale, const View& view, const Tool& currentTool, ChunkManager& chunkManager, const bool& drawSelectionLines);
         bool hasStartedBoxSelect() const;
-        IntRect* getFinalSelectionBounds() const;
+        weak_ptr<const IntRect> getFinalSelectionBounds() const;
         IntRect getBoxSelectArea() const;
         bool withinTempBounds(Vector2u pos) const;
         const Image* getTempMask() const;
+        bool hasTempSelection() const;
 
         void clear();
-        void setSize(Vector2u size);
-
         void selectAll();
 
         void boxShapeStart(Vector2u startPos, bool additive, ShapeSelectType type);
         void boxShapeEnd(Vector2u endPos);
         void boxShapeFinish();
 
-        void wandSelect(Vector2u pos, bool additive, int8_t tolerance);
-        void wandClear();
+        void wandSelect(Vector2u pos, int8_t tolerance);
+        void wandCancel();
         void wandFinish();
 
         void createTempSelection(Vector2u size);

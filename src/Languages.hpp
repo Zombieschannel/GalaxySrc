@@ -5,6 +5,8 @@
 #include <vector>
 #include <sstream>
 
+static const std::vector<std::string> c_languageNames = { "English", "Deutsch" };
+
 class LL //language loader
 {
 	std::uint8_t languageID = 0;
@@ -41,9 +43,9 @@ public:
 						temp.pop_back();
 					if (temp.empty())
 					{
-						if (!get().strings[key][0].empty())
-							std::cerr << "Missing translation " << get().strings[key].size() << " for entry " << key << std::endl;
-						get().strings[key].push_back(get().strings[key][0]);
+						if (!get().strings[key].front().empty())
+							std::cerr << "Missing " << c_languageNames[get().strings[key].size()] << " translation for entry " << key << std::endl;
+						get().strings[key].push_back(get().strings[key].front());
 					}
 					else
 						get().strings[key].push_back(temp);
