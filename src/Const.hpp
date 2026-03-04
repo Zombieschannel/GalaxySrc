@@ -1,10 +1,10 @@
 #pragma once
 #include <SFML/Graphics.hpp>
-#include "Languages.hpp"
 #include "Namespace.hpp"
+
 using namespace sf;
 
-const array<uint8_t, 3> c_versionNumber = {0, 1, 1};
+const array<uint8_t, 3> c_versionNumber = {0, 2, 2};
 
 #ifdef SFML_X86
 static const string c_SFML_ARCH = "x86";
@@ -24,7 +24,6 @@ static const string c_AppVersion = "v." + to_string(c_versionNumber.at(0)) + "."
 
 static const string c_AppName = "Galaxy " + c_AppVersion;
 
-static const int8_t c_helpCnt = 4;
 static const int8_t c_fileMenuCnt = 5;
 static const int8_t c_languageCnt = 2;
 static const int8_t c_resamplingMethodCnt = 6;
@@ -38,11 +37,7 @@ static const float c_UIElementSize = 0.01f;
 static const float c_rulerSize = 15.f;
 static const int8_t c_maxRecentFiles = 15;
 static const int16_t c_maxLayers = 10000;
-#ifdef SFML_DESKTOP
 static const int8_t c_colorCount = 2;
-#else
-static const int8_t c_colorCount = 1;
-#endif
 static const uint32_t c_noChangeReturnColor = 0x505050FF;
 
 static const uint8_t c_keyViewMove = 30;
@@ -50,10 +45,17 @@ static const uint8_t c_edgeViewMove = 100;
 static const uint8_t c_edgeViewMoveFaster = 200;
 static const float c_touchPadViewMove = 50.f;
 
+typedef int16_t ChunkID;
+typedef int16_t LayerID;
+typedef int16_t EditorID;
+typedef int8_t ColorID;
+
 static const array c_blendModes = {
         BlendMode(BlendMode::Factor::One, BlendMode::Factor::Zero),
-        BlendMode(BlendMode::Factor::SrcAlpha, BlendMode::Factor::One, BlendMode::Equation::Add, BlendMode::Factor::One, BlendMode::Factor::One, BlendMode::Equation::Add),
-        BlendMode(BlendMode::Factor::SrcAlpha, BlendMode::Factor::OneMinusSrcAlpha, BlendMode::Equation::Add, BlendMode::Factor::One, BlendMode::Factor::OneMinusSrcAlpha, BlendMode::Equation::Add),
+        BlendMode(BlendMode::Factor::SrcAlpha, BlendMode::Factor::One, BlendMode::Equation::Add,
+                BlendMode::Factor::One, BlendMode::Factor::One, BlendMode::Equation::Add),
+        BlendMode(BlendMode::Factor::SrcAlpha, BlendMode::Factor::OneMinusSrcAlpha, BlendMode::Equation::Add,
+                BlendMode::Factor::One, BlendMode::Factor::OneMinusSrcAlpha, BlendMode::Equation::Add),
         BlendMode(BlendMode::Factor::DstColor, BlendMode::Factor::Zero)
 };
 
@@ -61,8 +63,6 @@ static const array<string, 4> c_imageExtensions = {".png", ".jpg", ".bmp", ".tga
 
 static const string c_futurePlan =
 R"(Future plans - everything below is subject to change
--CPU separate canvas and UI threads [0.2.0]
--Basic adjustments and effects [0.2.0]
 -Text and shape rendering [0.3.0]
 -Custom cursor icons for tools [0.3.0]
 -Quick shortcut icons in GUI [0.3.0]
@@ -73,7 +73,29 @@ R"(Future plans - everything below is subject to change
 )";
 
 static const string c_changelog =
-R"(Small bugfix update - 0.1.1 (3. Mar 2026)
+R"(Another small bugfix update - 0.2.2 (1. May 2026)
+-Fixed copy and cut working only on the bottom layer
+-Fixed gradient working only on the bottom layer
+-Fixed transform image working only on the bottom layer
+-Fixed move selection not working properly after selecting with wand and not finishing selection
+
+Small bugfix update - 0.2.1 (5. Apr 2026)
+-Settings window now resizes after changing font size
+-Popup windows now recenter after the app window resizes
+-Fixed font size not being saved and restored properly
+
+The threads and effects update - 0.2.0 (1. Apr 2026)
+-Basic multithreading: separated canvas and rendering/UI threads
+-Added 5 adjustments: black and white, brightness/contrast, HSV, invert colors, tint
+-Added 5 effects: Gaussian blur, box blur, directional blur, white noise, fractal noise
+-Added CLI tools for unit testing in the future
+-Added holding Ctrl to switch to additive selection, holding Shift to have square aspect ratio
+-Brush no longer replaces pixels if there is transparency
+-Added explicit option to show color picker in triangle style rather than using mouse right click
+-Left color and right color renamed to primary and secondary
+-Added debug mode
+
+Small bugfix update - 0.1.1 (3. Mar 2026)
 -Escape key can be used for canceling operations in the subtitle bar
 -Wand fill automatically finishes after selecting new position similar to bucket fill
 -Fixed incorrect blending when pasting copied image

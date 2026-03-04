@@ -14,10 +14,13 @@ PopUpTitle[12],Setup,Einrichtung
 PopUpTitle[13],Transform image,Bild transformieren
 PopUpTitle[14],Save before exit?,
 PopUpTitle[15],Save before close?,
+PopUpTitle[16],Adjustment,
+PopUpTitle[17],Effect,
 OtherType[0],Changelog,Änderungsprotokoll
 OtherType[1],</> Future plans,</> Zukunftspläne
 OtherType[2],OpenGL info,OpenGL Info
-OtherType[3],About,Über
+OtherType[3],Debug mode,
+OtherType[4],About,Über
 fileMenu[0],New image,Neues Bild
 fileMenu[1],Open image,Bild öffnen
 fileMenu[2],Save image,Bild speichern
@@ -45,6 +48,7 @@ shortcut[14],Open image,Bild öffnen
 shortcut[15],Cut,Ausschneiden
 shortcut[16],Deselect all,Auswahl aufheben
 shortcut[17],Transform image,Bild transformieren
+shortcut[18],Debug mode,
 setupOption[0],New image,Neues Bild
 setupOption[1],Open,Öffnen
 setupOption[2],Settings,Einstellungen
@@ -79,6 +83,16 @@ layerMenu[5],Merge layer down,Mit der darunterliegenden Ebene zusammenführen
 layerMenu[6],Flip layer horizontal,Ebene horizontal spiegeln
 layerMenu[7],Flip layer vertical,Ebene vertikal spiegeln
 layerMenu[8],Layer properties,Ebeneneigenschaften
+adjustMenu[0],Black and white,
+adjustMenu[1],Brightness and contrast,
+adjustMenu[2],Adjust HSV,
+adjustMenu[3],Invert colors,
+adjustMenu[4],Adjust tint,
+effectMenu[0],Gaussian blur,
+effectMenu[1],Box blur,
+effectMenu[2],Directional blur,
+effectMenu[3],Add white noise,
+effectMenu[4],Add fractal noise,
 toolName[0],Box select,Rechteckige Auswahl
 toolName[1],Circle select,Kreis Auswahl
 toolName[2],Zoom,Zoomen
@@ -114,6 +128,21 @@ layerToolTip[6],Layer properties,Ebeneneigenschaften
 panMouseButton[0],Middle button,
 panMouseButton[1],Extra button 1,
 panMouseButton[2],Extra button 2,
+Show color picker in triangle style,Show color picker in triangle style,
+Angle,Angle,
+Smoothness,Smoothness,
+Octaves,Octaves,
+Seed,Seed,
+Frequency,Frequency,
+Intensity,Intensity,
+Red,Red,
+Green,Green,
+Blue,Blue,
+Brightness,Brightness,
+Contrast,Contrast,
+Hue,Hue,
+Saturation,Saturation,
+Value,Value,
 Pan mouse button,Pan mouse button,
 Draw inner selection lines,Draw inner selection lines,
 Unsaved files,Unsaved files,
@@ -123,12 +152,12 @@ Best pixel fit,Best pixel fit,
 Best fit,Best fit,
 Selected area,Selected area,
 Box area,Box area,
-Left color,Left color,Linke Farbe
-Left preview,Left preview,Linke Vorschau
-Left,Left,Links
-Right color,Right color,Rechte Farbe
-Right preview,Right preview,Rechte Vorschau
-Right,Right,Rechts
+Primary color,Primary color,
+Primary preview,Primary preview,
+Primary,Primary,
+Secondary color,Secondary color,
+Secondary preview,Secondary preview,
+Secondary,Secondary,
 Color Picker,Color Picker,Farbpicker
 Tool Picker,Tool Picker,Werkzeugauswahl
 Layers,Layers,Ebenen

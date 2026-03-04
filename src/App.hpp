@@ -5,13 +5,16 @@
 #include <filesystem>
 #include <set>
 #include <thread>
+#include "Processing/AdjustmentSettings.hpp"
+#include "Processing/EffectSettings.hpp"
 #include "AppSettings.hpp"
+#include "Canvas/CanvasWorker.hpp"
 #include "Const.hpp"
-#include "inc/ZTB.hpp"
-#include "ImageEditor.hpp"
-#include "ColorPicker.hpp"
-#include "LayerPicker.hpp"
-#include "ToolPicker.hpp"
+#include "ZEditorsCommon/ZTB.hpp"
+#include "Rendering/ImageEditor.hpp"
+#include "Pickers/ColorPicker.hpp"
+#include "Pickers/LayerPicker.hpp"
+#include "Pickers/ToolPicker.hpp"
 
 using namespace sf;
 
@@ -21,31 +24,35 @@ namespace glxy
     {
         RenderWindow window;
         vector<PopUpState> popUpState = { PopUpState::Setup };
-        vector<unique_ptr<ImageEditor>> _imageEditor;
-        int16_t activeImageEditor = -1;
-        int16_t hoveredImageEditor = -1;
+        vector<shared_ptr<ImageEditor>> _imageEditor;
+        EditorID activeImageEditor = -1;
+        EditorID hoveredImageEditor = -1;
 
         unique_ptr<Image> clipboardImage;
         Vector2u clipboardLocation;
 
         ImGuiID mainDockID = 0;
         float subTitleBarHeight = 0;
-        int16_t editorCloseAttempt = -1;
+        EditorID editorCloseAttempt = -1;
+        Adjustments targetAdjustment;
+        Effects targetEffect;
 
         ColorPicker _colorPicker;
         ToolPicker _toolPicker;
         LayerPicker _layerPicker;
 
-        unique_ptr<std::thread> workerThread;
-        float workerThreadProgress = 0;
         unique_ptr<Cursor> cursor;
         Cursor::Type cursorType = Cursor::Type::Arrow;
         AppSettings settings;
+        AdjustmentSettings adjSettings;
+        EffectSettings effSettings;
 
         string mainFontData;
         Font mainFont;
 
         bool changeFont = false;
+        Tool changeToTool = Tool::Count;
+        bool resetPopupWindow = false;
         Image windowLogo;
         Texture windowLogoTexture;
         Clock pdo;
@@ -65,9 +72,13 @@ namespace glxy
         ~App();
         bool hasUnsavedImages() const;
         void ExitApp(bool windowClose);
-        void DeleteEditor(int32_t ID);
+        void DeleteEditor(EditorID ID);
         void AddRecentFile(const filesystem::path& file);
         void setCursorType(Cursor::Type cursorType);
+        template <typename T>
+        void AddWork(const T& work);
+        template <typename T>
+        void AddWorkAndWait(const T& work);
 
         void Start(const filesystem::path& filename, bool openWithGalaxy, const Clock& startUpTimer);
         void RecreateAppWindow();
@@ -77,10 +88,24 @@ namespace glxy
         void SubTitleBar();
         void PopUp();
         void MainWindow();
-        void setActiveEditor(int32_t ID);
-        void setHoveredEditor(int32_t ID);
+        void UpdateRenderWorker() const;
+        void setActiveEditor(EditorID ID);
+        void setHoveredEditor(EditorID ID);
         void app();
-        bool OpenImage(const filesystem::path& fileName);
+        void OpenImage(const filesystem::path& fileName);
         bool SaveImage();
     };
+
+    template <typename T>
+    void App::AddWork(const T& work)
+    {
+        CanvasWorker::AddWork(work, activeImageEditor);
+    }
+
+    template <typename T>
+    void App::AddWorkAndWait(const T& work)
+    {
+        CanvasWorker::AddWork(work, activeImageEditor);
+        popUpState.push_back(PopUpState::ThreadWork);
+    }
 }

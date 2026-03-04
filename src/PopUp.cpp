@@ -1,11 +1,12 @@
 #include "App.hpp"
 #include "Func.hpp"
 #include "Global.hpp"
-#include "Shortcuts.hpp"
+#include "ZEditorsCommon/Shortcuts.hpp"
+#include "ZEditorsCommon/Themes.hpp"
+#include "ZEditorsCommon/Languages.hpp"
 #include <SFML/OpenGL.hpp>
-#include "Themes.hpp"
 
-#define BUILDNUMBER 2261
+#define BUILDNUMBER 3022
 void glxy::App::PopUp()
 {
     if (popUpState.empty())
@@ -13,14 +14,19 @@ void glxy::App::PopUp()
     static bool keyboardFocusHere = false;
     static Vector2i imageNewSize;
     static int32_t scalePercentage;
-    static Vector2i canvasResizePoint;
+    static Pivot canvasResizePivot;
     static Vector2i resolution;
-    static Vector2f transformImagePosition = Vector2f();
-    static Vector2f transformImageOrigin = Vector2f();
+    static Vector2f transformImagePosition;
+    static Vector2f transformImageOrigin;
     static Vector2f transformImageScale = Vector2f(1, 1);
     static float transformImageRotation = 0;
     static bool transformImageTile = false;
+    static int8_t maxOctaves = 1;
+    static float workerTodoWork = 0;
+    static unique_ptr<AdjustmentData> adjustmentData;
+    static unique_ptr<EffectData> effectData;
     bool reRender = false;
+    bool popStyle = false;
     const array popUpSize = {
         Vector2f(550, 450), //Settings
         Vector2f(630, 360), //About
@@ -38,21 +44,38 @@ void glxy::App::PopUp()
         Vector2f(500, 240), //TransformImage
         Vector2f(300, 150), //SaveBeforeExit
         Vector2f(300, 130), //SaveBeforeClose
+        Vector2f(400, 200), //Adjustment
+        Vector2f(400, 200), //Effect
     };
+    if (resetPopupWindow)
+    {
+        if (ImGui::IsPopupOpen(LL::ind("PopUpTitle[]", static_cast<int8_t>(popUpState.back())).c_str()))
+        {
+            const Vector2f size = popUpSize.at(static_cast<int8_t>(popUpState.back())) * settings.GUIScale;
+            ImGui::SetNextWindowSize(size);
+            ImGui::SetNextWindowPos(Vector2f(window.getSize().x / 2 - size.x / 2, window.getSize().y / 2 - size.y / 2));
+        }
+        resetPopupWindow = false;
+    }
     if (!ImGui::IsPopupOpen(LL::ind("PopUpTitle[]", static_cast<int8_t>(popUpState.back())).c_str()))
     {
         switch (popUpState.back())
         {
+        case PopUpState::ThreadWork:
+            workerTodoWork = CanvasWorker::getWorkAmount();
+            break;
+        case PopUpState::Effect:
+            reRender = true;
+            maxOctaves = log2((_imageEditor.at(activeImageEditor)->getSize().x + _imageEditor.at(activeImageEditor)->getSize().y) / 2.f) + 1;
+            effSettings.fractalOctaves = maxOctaves;
+            AddWork(CanvasWork::Finish{});
+            break;
+        case PopUpState::Adjustment:
+            reRender = true;
+            AddWork(CanvasWork::Finish{});
+            break;
         case PopUpState::TransformImage:
             reRender = true;
-            if (_imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer())
-            {
-                assert(!_imageEditor.at(activeImageEditor)->pixelSelect.getFinalSelectionBounds().expired());
-                const IntRect final = *_imageEditor.at(activeImageEditor)->pixelSelect.getFinalSelectionBounds().lock();
-                _imageEditor.at(activeImageEditor)->transformImageOriginalPosition = final.position;
-            }
-            else
-                _imageEditor.at(activeImageEditor)->transformImageOriginalPosition = Vector2i();
             break;
         case PopUpState::Resize:
             imageNewSize = Vector2i(_imageEditor.at(activeImageEditor)->getSize());
@@ -61,7 +84,7 @@ void glxy::App::PopUp()
         case PopUpState::ResizeCanvas:
             imageNewSize = Vector2i(_imageEditor.at(activeImageEditor)->getSize());
             scalePercentage = 100;
-            canvasResizePoint = Vector2i(1, 1);
+            canvasResizePivot = Pivot::Center;
             break;
         case PopUpState::New:
             if (clipboardImage)
@@ -72,23 +95,180 @@ void glxy::App::PopUp()
         case PopUpState::Open:
             keyboardFocusHere = true;
             break;
+        default: break;
         }
         const Vector2f size = popUpSize.at(static_cast<int8_t>(popUpState.back())) * settings.GUIScale;
         ImGui::SetNextWindowSize(size);
-        ImGui::SetWindowPos(LL::ind("PopUpTitle[]", static_cast<int8_t>(popUpState.back())).c_str(),
-            Vector2f(window.getSize().x / 2 - size.x / 2, window.getSize().y / 2 - size.y / 2), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(Vector2f(window.getSize().x / 2 - size.x / 2, window.getSize().y / 2 - size.y / 2), ImGuiCond_Always);
         ImGui::OpenPopup(LL::ind("PopUpTitle[]", static_cast<int8_t>(popUpState.back())).c_str());
+    }
+    switch (popUpState.back())
+    {
+    case PopUpState::Adjustment: case PopUpState::Effect: case PopUpState::LayerProperties: case PopUpState::TransformImage:
+        ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, Color::Transparent);
+        popStyle = true;
+        break;
+    default: break;
     }
     if (ImGui::BeginPopupModal(LL::ind("PopUpTitle[]", static_cast<int8_t>(popUpState.back())).c_str(), nullptr,
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings))
     {
         switch (popUpState.back())
         {
+        case PopUpState::Effect:
+            if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
+            {
+                switch (targetEffect)
+                {
+                case Effects::GaussianBlur:
+                    if (ImGui::SliderInt("Radius"_C, &effSettings.gaussBlurRadius, 0, 10, "%d", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (reRender)
+                    {
+                        effectData = make_unique<EffectGaussBlur>(effSettings.gaussBlurRadius);
+                        auto& effect = *reinterpret_cast<EffectGaussBlur*>(effectData.get());
+                        effect.values.resize(effSettings.gaussBlurRadius * 2 + 1);
+                        for (int32_t i = 0; i <= effect.values.size() / 2; i++)
+                            effect.values.at(i) = effect.values.at(effect.values.size() - i - 1) = Binomial(effect.values.size() - 1, i);
+                        for (auto& n : effect.values)
+                            effect.sum += n;
+                        effect.sum *= effect.sum;
+                    }
+                    break;
+                case Effects::BoxBlur:
+                    if (ImGui::SliderInt("Radius"_C, &effSettings.boxBlurRadius, 0, 128, "%d", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (reRender)
+                        effectData = make_unique<EffectBoxBlur>(effSettings.boxBlurRadius);
+                    break;
+                case Effects::DirectionalBlur:
+                    if (ImGui::SliderInt("Radius"_C, &effSettings.dirBlurRadius, 0, 128, "%d", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::SliderAngle("Angle"_C, &effSettings.dirBlurAngle))
+                        reRender = true;
+                    if (reRender)
+                        effectData = make_unique<EffectDirectionalBlur>(effSettings.dirBlurRadius, effSettings.dirBlurAngle);
+                    break;
+                case Effects::WhiteNoise:
+                    if (ImGui::SliderFloat("Intensity"_C, &effSettings.noiseIntensity, 0, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::SliderFloat("Saturation"_C, &effSettings.noiseSaturation, 0, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::SliderFloat("Frequency"_C, &effSettings.noiseFrequency, 0, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::InputInt("Seed"_C, &effSettings.noiseSeed))
+                        reRender = true;
+                    if (reRender)
+                    {
+                        effectData = make_unique<EffectWhiteNoise>(effSettings.noiseIntensity, effSettings.noiseSaturation, effSettings.noiseFrequency, effSettings.noiseSeed);
+                    }
+                    break;
+                case Effects::FractalNoise:
+                    if (ImGui::SliderInt("Octaves"_C, &effSettings.fractalOctaves, 1, maxOctaves, "%d", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::SliderFloat("Smoothness"_C, &effSettings.fractalSmoothness, 0.001f, 2, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::InputInt("Seed"_C, &effSettings.fractalSeed))
+                        reRender = true;
+                    if (reRender)
+                    {
+                        effectData = make_unique<EffectFractalNoise>(effSettings.fractalOctaves, effSettings.fractalSmoothness, effSettings.fractalSeed);
+                        auto& effect = *reinterpret_cast<EffectFractalNoise*>(effectData.get());
+                        effect.size = _imageEditor.at(activeImageEditor)->getSize();
+                        effect.color1 = _imageEditor.at(activeImageEditor)->currentColor.at(0);
+                        effect.color2 = _imageEditor.at(activeImageEditor)->currentColor.at(1);
+                        std::mt19937 generator(effSettings.fractalSeed);
+                        effect.values.resize(_imageEditor.at(activeImageEditor)->getSize().x);
+                        for (int32_t i = 0; i < effect.values.size(); i++)
+                        {
+                            effect.values.at(i).resize(_imageEditor.at(activeImageEditor)->getSize().y);
+                            for (int32_t j = 0; j < effect.values.at(i).size(); j++)
+                                effect.values.at(i).at(j) = static_cast<float>(generator()) / generator.max();
+                        }
+                    }
+                    break;
+                }
+                if (reRender)
+                    AddWork(CanvasWork::Effect{targetEffect, _layerPicker.getLayerIDSelected(activeImageEditor), std::move(effectData)});
+            }
+            ImGui::EndChild();
+            if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+            {
+                popUpState.pop_back();
+                _imageEditor.at(activeImageEditor)->unsavedChanges = true;
+                AddWorkAndWait(CanvasWork::FinishAdjustmentOrEffect{_layerPicker.getLayerIDSelected(activeImageEditor)});
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"_C, Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+            {
+                popUpState.pop_back();
+                AddWorkAndWait(CanvasWork::CancelAdjustmentOrEffect{});
+            }
+            break;
+        case PopUpState::Adjustment:
+            if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
+            {
+                switch (targetAdjustment)
+                {
+                case Adjustments::BlackAndWhite: case Adjustments::Invert:
+                    popUpState.pop_back();
+                    AddWork(CanvasWork::Adjustment{targetAdjustment, _layerPicker.getLayerIDSelected(activeImageEditor), nullptr});
+                    AddWorkAndWait(CanvasWork::FinishAdjustmentOrEffect{_layerPicker.getLayerIDSelected(activeImageEditor)});
+                    reRender = false;
+                    break;
+                case Adjustments::BrightnessContrast:
+                    if (ImGui::SliderFloat("Brightness"_C, &adjSettings.brightness, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::SliderFloat("Contrast"_C, &adjSettings.contrast, -1, 1, "%.4f", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic))
+                        reRender = true;
+                    if (reRender)
+                        adjustmentData = make_unique<AdjustBrightnessContrast>(adjSettings.brightness, adjSettings.contrast);
+                    break;
+                case Adjustments::HSV:
+                    if (ImGui::SliderFloat("Hue"_C, &adjSettings.hue, 0, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::SliderFloat("Saturation"_C, &adjSettings.saturation, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::SliderFloat("Value"_C, &adjSettings.value, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (reRender)
+                        adjustmentData = make_unique<AdjustHSV>(adjSettings.hue, adjSettings.saturation, adjSettings.value);
+                    break;
+                case Adjustments::Tint:
+                    if (ImGui::SliderFloat("Red"_C, &adjSettings.tintRed, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::SliderFloat("Green"_C, &adjSettings.tintGreen, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (ImGui::SliderFloat("Blue"_C, &adjSettings.tintBlue, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                        reRender = true;
+                    if (reRender)
+                        adjustmentData = make_unique<AdjustTint>(adjSettings.tintRed, adjSettings.tintGreen, adjSettings.tintBlue);
+                    break;
+                default: break;
+                }
+                if (reRender)
+                    AddWork(CanvasWork::Adjustment{targetAdjustment, _layerPicker.getLayerIDSelected(activeImageEditor), std::move(adjustmentData)});
+            }
+            ImGui::EndChild();
+            if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+            {
+                popUpState.pop_back();
+                _imageEditor.at(activeImageEditor)->unsavedChanges = true;
+                AddWorkAndWait(CanvasWork::FinishAdjustmentOrEffect{_layerPicker.getLayerIDSelected(activeImageEditor)});
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"_C, Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+            {
+                popUpState.pop_back();
+                AddWorkAndWait(CanvasWork::CancelAdjustmentOrEffect{});
+            }
+            break;
         case PopUpState::SaveBeforeClose:
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
                 ImGui::Text("%s", "glxyWarning2"_C);
-                ImGui::BulletText("%s", _imageEditor.at(editorCloseAttempt)->imageName.c_str());
+                lock_guard lock(_imageEditor.at(editorCloseAttempt)->common.mtxEditorWorkerCommon);
+                ImGui::BulletText("%s", _imageEditor.at(editorCloseAttempt)->getImageName().c_str());
             }
             ImGui::EndChild();
             if (ImGui::Button("Save"_C, Vector2f(ImGui::GetContentRegionAvail().x / 3, ImGui::GetContentRegionAvail().y)))
@@ -117,8 +297,9 @@ void glxy::App::PopUp()
             {
                 for (auto& n : _imageEditor)
                 {
+                    lock_guard lock(n->common.mtxEditorWorkerCommon);
                     if (n->unsavedChanges)
-                        ImGui::BulletText("%s", n->imageName.c_str());
+                        ImGui::BulletText("%s", n->getImageName().c_str());
                 }
             }
             ImGui::EndChild();
@@ -144,51 +325,27 @@ void glxy::App::PopUp()
                     reRender = true;
                 if (ImGui::SliderFloat2("Scale"_C, &transformImageScale.x, 0.001f, 1000, "%.3f", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic))
                     reRender = true;
-                ImGui::BeginDisabled(_imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer());
+                ImGui::BeginDisabled(_imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer(0));
                 if (ImGui::Checkbox("Tileable"_C, &transformImageTile))
                     reRender = true;
                 ImGui::EndDisabled();
                 if (reRender)
                 {
-                    ImageEditor* editor = _imageEditor.at(activeImageEditor).get();
-                    const Vector2f posOffset = Vector2f(editor->tempImage->getSize()) / 2.f + Vector2f(editor->transformImageOriginalPosition);
-                    unique_ptr<Transformable>& tran = editor->transformImageTransform;
-                    if (!tran)
-                        tran = make_unique<Transformable>();
-                    tran->setPosition(Vector2f(transformImagePosition.x * editor->getSize().x, transformImagePosition.y * editor->getSize().y) + posOffset);
-                    tran->setScale(transformImageScale);
-                    tran->setOrigin(Vector2f(transformImageOrigin.x * editor->tempImage->getSize().x, transformImageOrigin.y * editor->tempImage->getSize().y) +
-                        Vector2f(editor->tempImage->getSize()) / 2.f);
-                    tran->setRotation(degrees(transformImageRotation));
-
-                    editor->chunkManager.createTempLayer();
-                    editor->chunkManager.clearTempLayer(Color::Transparent);
-                    if (editor->chunkManager.hasSelectionLayer())
-                        editor->chunkManager.clearSelection();
-
-                    const IntRect rect = editor->TransformImage(*tran, transformImageTile);
-                    if (editor->chunkManager.hasSelectionLayer())
-                    {
-                        if (editor->transformImageSelectionArea != IntRect())
-                            editor->pixelSelect.UpdateTexture(getUnion(&editor->transformImageSelectionArea, &rect));
-                        else
-                            editor->pixelSelect.UpdateTexture(rect);
-                    }
-                    editor->transformImageSelectionArea = rect;
-                    editor->chunkManager.RenderChunkArea();
+                    AddWork(CanvasWork::TransformImage{transformImagePosition, transformImageRotation, transformImageScale, transformImageOrigin, transformImageTile});
                 }
             }
             ImGui::EndChild();
             if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
             {
-                _imageEditor.at(activeImageEditor)->OptionFinish();
                 popUpState.pop_back();
+                _imageEditor.at(activeImageEditor)->unsavedChanges = true;
+                AddWorkAndWait(CanvasWork::Finish{});
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel"_C, Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
             {
-                _imageEditor.at(activeImageEditor)->OptionCancel();
                 popUpState.pop_back();
+                AddWorkAndWait(CanvasWork::Cancel{});
             }
             break;
         case PopUpState::Resize:
@@ -245,8 +402,13 @@ void glxy::App::PopUp()
             ImGui::EndChild();
             if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
             {
-                _imageEditor.at(activeImageEditor)->RescaleCanvas(Vector2u(imageNewSize), static_cast<RescaleMethod>(settings.resamplingMethod));
                 popUpState.pop_back();
+                auto& editor = _imageEditor.at(activeImageEditor);
+                AddWorkAndWait(CanvasWork::RescaleCanvas{Vector2u(imageNewSize), static_cast<RescaleMethod>(settings.resamplingMethod)});
+                editor->ClampView();
+                editor->unsavedChanges = true;
+                editor->gridLines.manualChange = true;
+                editor->rulerUI.manualChange = true;
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel"_C, Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
@@ -304,7 +466,7 @@ void glxy::App::PopUp()
                 {
                     for (int8_t j = 0; j < 3; j++)
                     {
-                        const Vector2i offset = Vector2i(j, i) - Vector2i(canvasResizePoint);
+                        const Vector2i offset = Vector2i(j, i) - Vector2i(static_cast<int8_t>(canvasResizePivot) % 3, static_cast<int8_t>(canvasResizePivot) / 3);
                         int8_t index = 0;
                         if (offset.x >= -1 && offset.x <= 1 && offset.y >= -1 && offset.y <= 1)
                             index = (offset.x + 1) + (offset.y + 1) * 3 + 1;
@@ -312,7 +474,9 @@ void glxy::App::PopUp()
                         if (ImGui::ImageButton(("Button" + to_string(i) + to_string(j)).c_str(),
                             canvasIcons.getNativeHandle(), Vector2f(25, 25) * settings.GUIScale,
                             Vector2f(texOffset, 0), Vector2f(texOffset + 0.1f, 1)))
-                            canvasResizePoint = Vector2i(j, i);
+                        {
+                            canvasResizePivot = static_cast<Pivot>(j + i * 3);
+                        }
                         if (j < 2)
                             ImGui::SameLine();
                         else
@@ -323,12 +487,13 @@ void glxy::App::PopUp()
             ImGui::EndChild();
             if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
             {
-                auto& editor = _imageEditor.at(activeImageEditor);
-                const Vector2i size = static_cast<Vector2i>(editor->getSize());
-                const Vector2i position = -Vector2i((imageNewSize.x - size.x) * canvasResizePoint.x * 0.5f,
-                    (imageNewSize.y - size.y) * canvasResizePoint.y * 0.5f);
-                editor->ResizeCanvas(IntRect(position, {imageNewSize.x, imageNewSize.y}));
                 popUpState.pop_back();
+                auto& editor = _imageEditor.at(activeImageEditor);
+                AddWorkAndWait(CanvasWork::ResizeCanvas{Vector2u(imageNewSize), canvasResizePivot});
+                editor->ClampView();
+                editor->unsavedChanges = true;
+                editor->gridLines.manualChange = true;
+                editor->rulerUI.manualChange = true;
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel"_C, Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
@@ -341,37 +506,46 @@ void glxy::App::PopUp()
         {
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
-                ImGui::InputText("Layer name"_C, &_layerPicker.getLayer().name[0], _layerPicker.getLayer().name.size() + 1, ImGuiInputTextFlags_CallbackResize, TextCallback, &_layerPicker.getLayer().name);
-                if (ImGui::Checkbox("Enabled"_C, &_layerPicker.getLayer().enabled))
-                    _imageEditor.at(activeImageEditor)->chunkManager.RenderChunkArea();
-                int32_t value = _layerPicker.getLayer().transparency;
-                if (ImGui::SliderInt("Transparency"_C, &value, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp))
+                const LayerID layerID = _layerPicker.getLayerIDSelected(activeImageEditor);
+                const auto& layer = _layerPicker.getLayer(activeImageEditor, layerID);
+                string data = layer.name;
+                if (ImGui::InputText("Layer name"_C, &data[0], data.size() + 1, ImGuiInputTextFlags_CallbackResize, TextCallback, &data))
+                    _layerPicker.setLayerName(activeImageEditor, layerID, data);
+                bool enabled = layer.enabled;
+                if (ImGui::Checkbox("Enabled"_C, &enabled))
                 {
-                    _layerPicker.getLayer().transparency = value;
-                    _imageEditor.at(activeImageEditor)->chunkManager.RenderChunkArea();
+                    _layerPicker.setLayerEnabled(activeImageEditor, layerID, enabled);
+                    _imageEditor.at(activeImageEditor)->unsavedChanges = true;
+                    AddWork(CanvasWork::LayerPropertyChanged{layerID, layer.enabled, layer.transparency, layer.blendMode});
                 }
-                if (ImGui::BeginCombo("Blend mode"_C, LL::ind("blendModeName[]", _layerPicker.getLayer().blendMode).c_str()))
+                int32_t transparency = layer.transparency;
+                if (ImGui::SliderInt("Transparency"_C, &transparency, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp))
+                {
+                    _layerPicker.setLayerTransparency(activeImageEditor, layerID, transparency);
+                    _imageEditor.at(activeImageEditor)->unsavedChanges = true;
+                    AddWork(CanvasWork::LayerPropertyChanged{layerID, layer.enabled, layer.transparency, layer.blendMode});
+                }
+                uint8_t blendMode = layer.blendMode;
+                if (ImGui::BeginCombo("Blend mode"_C, LL::ind("blendModeName[]", blendMode).c_str()))
                 {
                     for (uint8_t i = 0; i < c_blendModes.size(); i++)
                         if (ImGui::Selectable(LL::ind("blendModeName[]", i).c_str()))
                         {
-                            _layerPicker.getLayer().blendMode = i;
-                            _imageEditor.at(activeImageEditor)->chunkManager.RenderChunkArea();
+                            _layerPicker.setLayerBlendMode(activeImageEditor, layerID, i);
+                            _imageEditor.at(activeImageEditor)->unsavedChanges = true;
+                            AddWork(CanvasWork::LayerPropertyChanged{layerID, layer.enabled, layer.transparency, layer.blendMode});
                         }
                     ImGui::EndCombo();
                 }
             }
             ImGui::EndChild();
             if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
-            {
                 popUpState.pop_back();
-            }
             break;
         }
         case PopUpState::Open:
         {
             static string fileName;
-            ImGui::SetWindowFocus();
             ImGui::SeparatorText("From file"_C);
             if (keyboardFocusHere)
             {
@@ -390,13 +564,7 @@ void glxy::App::PopUp()
                         continue;
                     if (ImGui::Selectable(n->second.c_str()))
                     {
-                        if (OpenImage(n->second))
-                        {
-                            popUpState.pop_back();
-                            if (!popUpState.empty() && popUpState.back() == PopUpState::Setup)
-                                popUpState.pop_back();
-                            break;
-                        }
+                        OpenImage(n->second);
                     }
                 }
             }
@@ -404,12 +572,7 @@ void glxy::App::PopUp()
             ImGui::BeginDisabled(fileName.empty());
             if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
             {
-                if (OpenImage(fileName))
-                {
-                    popUpState.pop_back();
-                    if (!popUpState.empty() && popUpState.back() == PopUpState::Setup)
-                        popUpState.pop_back();
-                }
+                OpenImage(fileName);
             }
             ImGui::EndDisabled();
             ImGui::SameLine();
@@ -451,18 +614,11 @@ void glxy::App::PopUp()
             ImGui::EndChild();
             if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
             {
-                _imageEditor.at(activeImageEditor)->imagePath = fileName + c_imageExtensions.at(extension);
-                _imageEditor.at(activeImageEditor)->imageName = filesystem::path(fileName + c_imageExtensions.at(extension)).filename().string();
-                _imageEditor.at(activeImageEditor)->imageJPGQuality = jpgQuality;
-                if (SaveImage())
-                {
-                    if (editorCloseAttempt >= 0)
-                    {
-                        DeleteEditor(editorCloseAttempt);
-                        editorCloseAttempt = -1;
-                    }
-                    popUpState.pop_back();
-                }
+                auto& ie = _imageEditor.at(activeImageEditor);
+                ie->imagePath = fileName + c_imageExtensions.at(extension);
+                ie->imageJPGQuality = jpgQuality;
+                ie->Save();
+                popUpState.pop_back();
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel"_C, Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
@@ -483,6 +639,7 @@ void glxy::App::PopUp()
             };
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
+                ImGui::SetWindowFocus();
                 ImGui::DragInt2("Resolution"_C, &resolution.x, 1, 1, 1e5, "%d", ImGuiSliderFlags_AlwaysClamp);
                 ImGui::Spacing();
                 ImGui::Text("%s:", "Background"_C);
@@ -493,10 +650,8 @@ void glxy::App::PopUp()
             ImGui::EndChild();
             if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
             {
-                CreateEmptyImage(Vector2u(resolution), colors[background]);
-                popUpState.pop_back();
-                if (!popUpState.empty() && popUpState.back() == PopUpState::Setup)
-                    popUpState.pop_back();
+                CreateEmptyImage(Vector2u(resolution), colors.at(background));
+                popUpState.push_back(PopUpState::ThreadWork);
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel"_C, Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
@@ -512,11 +667,7 @@ void glxy::App::PopUp()
                 openWithGalaxyFile = openWithGalaxyFile.lexically_normal();
                 if (filesystem::exists(openWithGalaxyFile))
                 {
-                    if (OpenImage(openWithGalaxyFile))
-                    {
-                        popUpState.pop_back();
-                        break;
-                    }
+                    OpenImage(openWithGalaxyFile);
                 }
                 openWithGalaxyFile = "";
             }
@@ -565,13 +716,60 @@ void glxy::App::PopUp()
         }
         break;
         case PopUpState::ThreadWork:
-            ImGui::ProgressBar(workerThreadProgress, ImGui::GetContentRegionAvail());
-            if (workerThreadProgress >= 1.f)
+        {
+            if (!workerTodoWork)
+                ImGui::ProgressBar(1, ImGui::GetContentRegionAvail());
+            else
             {
-                workerThread.reset();
+                const float value = 1 - CanvasWorker::getWorkAmount() / workerTodoWork;
+                ImGui::ProgressBar(value, ImGui::GetContentRegionAvail());
+            }
+
+            if (!CanvasWorker::hasWork())
+            {
                 popUpState.pop_back();
+                CanvasWorker::LockAddingNewWork(false);
+                if (!popUpState.empty())
+                {
+                    switch (popUpState.back())
+                    {
+                    case PopUpState::New:
+                        popUpState.pop_back();
+                        if (!popUpState.empty() && popUpState.back() == PopUpState::Setup)
+                            popUpState.pop_back();
+                        _imageEditor.at(activeImageEditor)->FinishCreation();
+                        break;
+                    case PopUpState::Open:
+                        popUpState.pop_back();
+                        if (_imageEditor.at(activeImageEditor)->getSize() == Vector2u())
+                            DeleteEditor(activeImageEditor);
+                        else
+                        {
+                            _imageEditor.at(activeImageEditor)->FinishCreation();
+                            if (!popUpState.empty() && popUpState.back() == PopUpState::Setup)
+                                popUpState.pop_back();
+                        }
+                        break;
+                    case PopUpState::Save:
+                        if (editorCloseAttempt >= 0)
+                        {
+                            DeleteEditor(editorCloseAttempt);
+                            editorCloseAttempt = -1;
+                        }
+                        popUpState.pop_back();
+                        break;
+                    case PopUpState::ToolChanged:
+                        popUpState.pop_back();
+                        _imageEditor.at(activeImageEditor)->currentTool = changeToTool;
+                        _imageEditor.at(activeImageEditor)->forceToolChange = true;
+                        break;
+                    default:
+                        break;
+                    }
+                }
             }
             break;
+        }
         case PopUpState::GLScan:
         {
             static bool firstScan = true;
@@ -667,6 +865,7 @@ void glxy::App::PopUp()
             static array bgColor = { settings.bgColor.r / 255.f, settings.bgColor.g / 255.f, settings.bgColor.b / 255.f };
             static int8_t pressedID = -1;
             static bool editing = false;
+            static int32_t fontSize = 16.f * settings.GUIScale;
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
                 ImGui::SeparatorText("Graphics"_C);
@@ -761,12 +960,13 @@ void glxy::App::PopUp()
                     ImGui::EndCombo();
                 }
                 ImGui::PushItemWidth(300 * settings.GUIScale);
-                ImGui::SliderInt("Font size"_C, &settings.fontSize, 12, 24, "%d", ImGuiSliderFlags_AlwaysClamp);
+                ImGui::SliderInt("Font size"_C, &fontSize, 12, 24, "%d", ImGuiSliderFlags_AlwaysClamp);
                 ImGui::PopItemWidth();
                 ImGui::SameLine();
                 if (ImGui::Button("Apply"_C))
                 {
-                    settings.GUIScale = settings.fontSize / 16.f;
+                    settings.GUIScale = fontSize / 16.f;
+                    resetPopupWindow = true;
                     changeFont = true;
                 }
                 if (ImGui::BeginCombo("Language"_C, c_languageNames.at(settings.languageID).c_str()))
@@ -784,6 +984,7 @@ void glxy::App::PopUp()
                 ImGui::SeparatorText("Editor"_C);
                 ImGui::Checkbox("Freeze when out of focus"_C, &settings.outOfFocus); ToolTip("glxyTooltip4"_S);
                 ImGui::Checkbox("Draw inner selection lines"_C, &settings.drawSelectionLines);
+                ImGui::Checkbox("Show color picker in triangle style"_C, &settings.colorPickerTriangle);
                 ImGui::Checkbox("Enable touchpad support"_C, &settings.touchPadSupport);
                 if (ImGui::BeginCombo("Pan mouse button"_C, LL::ind("panMouseButton[]", settings.panMouseButton).c_str()))
                 {
@@ -881,4 +1082,6 @@ void glxy::App::PopUp()
         }
         ImGui::EndPopup();
     }
+    if (popStyle)
+        ImGui::PopStyleColor();
 }

@@ -1,8 +1,9 @@
 #pragma once
 #include <SFML/Graphics.hpp>
-#include "inc/ZTB.hpp"
+#include "ZEditorsCommon/ZTB.hpp"
 #include <imgui.h>
 #include "Namespace.hpp"
+#include "Const.hpp"
 
 #ifdef NDEBUG
 #define validate(x) static_cast<void>(x)
@@ -13,7 +14,11 @@
 using namespace sf;
 static Vector2f getSFMLViewMousePos(const FloatRect& mainView, const View& view)
 {
+#ifdef SFML_DESKTOP
     Vector2f msPos = static_cast<Vector2f>(InputEvent::getMousePosition());
+#else
+    Vector2f msPos = static_cast<Vector2f>(InputEvent::getTouchPosition(0));
+#endif
     msPos.x -= mainView.position.x;
     msPos.y -= mainView.position.y;
     msPos.x /= mainView.size.x;
@@ -127,3 +132,54 @@ static Color LerpColor(const Color color1, const Color color2, float value)
     const ImVec4 diff = {color2.r / 255.f - color1.r / 255.f, color2.g / 255.f - color1.g / 255.f, color2.b / 255.f - color1.b / 255.f, color2.a / 255.f - color1.a / 255.f};
     return Color(color1.r + diff.x * 255 * value, color1.g + diff.y * 255 * value, color1.b + diff.z * 255 * value, color1.a + diff.w * 255 * value);
 }
+
+static int32_t Binomial(const int32_t n, const int32_t k)
+{
+    if (k == 0 || k == n)
+        return 1;
+    return Binomial(n - 1, k - 1) + Binomial(n - 1, k);
+}
+
+static uint8_t getBlendMode(const BlendMode& blendMode)
+{
+    return std::find(c_blendModes.begin(), c_blendModes.end(), blendMode) -  c_blendModes.begin();
+}
+
+enum class ShapeSelectType : int8_t
+{
+    Box,
+    Circle
+};
+
+enum class ImageLayerType : int8_t
+{
+    Color,
+    ColorTemp,
+    Selection,
+    SelectionTemp
+};
+
+enum class RescaleMethod : int8_t
+{
+    Triangle,
+    Box,
+    Catmullrom,
+    Mitchell,
+    CubicBSpline,
+    PointSample,
+    Count
+};
+
+enum class Pivot : int8_t
+{
+    LeftTop,
+    MiddleTop,
+    RightTop,
+    LeftMiddle,
+    Center,
+    RightMiddle,
+    LeftBottom,
+    MiddleBottom,
+    RightBottom,
+    Count
+};

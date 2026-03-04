@@ -1,4 +1,4 @@
-#include "resource.h"
+#include "ZEditorsCommon/resource.h"
 
 IDI_ICON2           ICON                    "AppLogo.ico"
 ID_RES1             BINARY                  "../assets/Res/Montserrat.ttf"

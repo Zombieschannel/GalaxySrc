@@ -1,5 +1,7 @@
 cmake_minimum_required (VERSION 3.15)
 project (Galaxy)
+set(APP_VERSION "0.2.2")
+set(APP_IDENTIFIER "com.Zombieschannel.Galaxy")
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(WINDOWS TRUE)
@@ -42,3 +44,18 @@ if (NOT EXISTS "versions/")
 endif()
 
 add_subdirectory("src")
+
+#Debian package
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets/
+        DESTINATION share/${PROJECT_NAME})
+
+set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
+set(CPACK_PACKAGE_VERSION "${APP_VERSION}")
+set(CPACK_GENERATOR "DEB")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Zombieschannel")
+set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A simple image editor.")
+
+include(CPack)

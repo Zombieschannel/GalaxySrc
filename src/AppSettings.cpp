@@ -1,9 +1,9 @@
 #include "AppSettings.hpp"
 #include "Global.hpp"
-#include "Languages.hpp"
+#include "ZEditorsCommon/Languages.hpp"
 #include "Namespace.hpp"
-#include "Shortcuts.hpp"
-#include "inc/ZTB.hpp"
+#include "ZEditorsCommon/Shortcuts.hpp"
+#include "ZEditorsCommon/ZTB.hpp"
 
 void glxy::AppSettings::Save() const
 {
@@ -35,6 +35,8 @@ void glxy::AppSettings::Save() const
     file.setValue("showRuler", showRuler);
     file.setValue("drawSelectionLines", drawSelectionLines);
     file.setValue("panMouseButton", panMouseButton);
+    file.setValue("colorPickerTriangle", colorPickerTriangle);
+    file.setValue("debugMode", debugMode);
     file.setValue("recentFileCount", static_cast<int32_t>(recentFiles.size()));
     int8_t counter = 0;
     for (auto& n : recentFiles)
@@ -80,6 +82,8 @@ void glxy::AppSettings::Load()
         file.loadValue("showRuler", showRuler);
         file.loadValue("drawSelectionLines", drawSelectionLines);
         file.loadValue("panMouseButton", panMouseButton);
+        file.loadValue("colorPickerTriangle", colorPickerTriangle);
+        file.loadValue("debugMode", debugMode);
 
         int8_t recentCount = 0;
         file.loadValue("recentFileCount", recentCount);

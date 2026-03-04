@@ -9,8 +9,11 @@ namespace glxy
     {
         Vector2u resolution = Vector2u(1280, 720);
         bool fullscreen = false;
+#ifdef SFML_DESKTOP
         float GUIScale = 1.f;
-        int32_t fontSize = 16;
+#else
+        float GUIScale = 1.25f;
+#endif
         bool verticalSync = true;
         bool outOfFocus = true;
         Color bgColor = Color(16, 16, 16);
@@ -23,8 +26,14 @@ namespace glxy
         bool syncViewport = false;
         bool showFPS = false;
         bool showGrid = true;
+#ifdef SFML_DESKTOP
         bool showRuler = true;
+#else
+        bool showRuler = false;
+#endif
         bool drawSelectionLines = true;
+        bool colorPickerTriangle = false;
+        bool debugMode = false;
         uint8_t panMouseButton = 0;
         std::set<std::pair<int64_t, std::string>> recentFiles;
 

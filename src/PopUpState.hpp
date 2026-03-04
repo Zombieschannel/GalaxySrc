@@ -17,5 +17,8 @@ enum class PopUpState
     TransformImage,
     SaveBeforeExit,
     SaveBeforeClose,
+    Adjustment,
+    Effect,
+    ToolChanged,
     Count
 };

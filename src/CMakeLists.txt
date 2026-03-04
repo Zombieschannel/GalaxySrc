@@ -1,7 +1,4 @@
 cmake_minimum_required (VERSION 3.15)
-set(APP_NAME "Galaxy")
-set(APP_VERSION "0.1.1")
-set(APP_IDENTIFIER "com.Zombieschannel.Galaxy")
 
 #FILES
 file(GLOB_RECURSE Project_SOURCES "*.cpp")
@@ -55,7 +52,7 @@ elseif(MACOS)
         BUNDLE True
         MACOSX_BUNDLE_ICON_FILE ${ICON_NAME}
         MACOSX_BUNDLE_GUI_IDENTIFIER ${APP_IDENTIFIER}
-        MACOSX_BUNDLE_BUNDLE_NAME ${APP_NAME}
+        MACOSX_BUNDLE_BUNDLE_NAME ${PROJECT_NAME}
         MACOSX_BUNDLE_BUNDLE_VERSION ${APP_VERSION}
         MACOSX_BUNDLE_SHORT_VERSION_STRING ${APP_VERSION}
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/MacOSXBundleInfo.plist.in
@@ -99,6 +96,7 @@ endif()
 if (ANDROID)
     target_compile_definitions(${PROJECT_NAME} PRIVATE SFML_MOBILE)
     target_compile_definitions(${PROJECT_NAME} PRIVATE SFML_OPENGL_ES)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_JNI)
 else()
     target_compile_definitions(${PROJECT_NAME} PRIVATE SFML_DESKTOP)
 endif()

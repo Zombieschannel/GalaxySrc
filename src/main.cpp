@@ -1,5 +1,6 @@
 #include "App.hpp"
 #include "Func.hpp"
+#include "CliTools.hpp"
 
 #ifdef SFML_SYSTEM_WINDOWS
 #include <Windows.h>
@@ -56,6 +57,21 @@ int32_t main(int32_t argc, char* argv[])
                 startParams = p;
             }
         }
+    }
+    if (!openWithGalaxy && argc > 1)
+    {
+#ifdef SFML_SYSTEM_WINDOWS
+        FreeConsole();
+        AllocConsole();
+        freopen("CONOUT$", "w", stderr);
+#endif
+
+        vector<string> arguments;
+        arguments.resize(argc);
+        for (int32_t i = 0; i < argc; i++)
+            arguments.at(i) = string(argv[i]);
+        glxy::CLITools cli;
+        return cli.Start(arguments);
     }
 
     Clock startUpTime;

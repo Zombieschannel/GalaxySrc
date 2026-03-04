@@ -6,7 +6,9 @@
 #include <fstream>
 #include <filesystem>
 #include <chrono>
+#include <mutex>
 #include <vector>
+#include <array>
 using std::string;
 using std::to_string;
 using std::vector;
@@ -27,5 +29,6 @@ using std::greater;
 using std::min;
 using std::max;
 using std::array;
+using std::lock_guard;
 namespace filesystem = std::filesystem;
 namespace chrono = std::chrono;

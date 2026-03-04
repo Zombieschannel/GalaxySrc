@@ -5,8 +5,8 @@ plugins {
 android {
     defaultConfig {
         applicationId "com.Zombieschannel.Galaxy"
-        versionCode 11
-        versionName "0.1.1"
+        versionCode 22
+        versionName "0.2.2"
 
         externalNativeBuild {
             cmake {
