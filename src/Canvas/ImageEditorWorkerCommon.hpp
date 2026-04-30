@@ -2,7 +2,6 @@
 #include <mutex>
 #include <SFML/Graphics.hpp>
 #include "../Namespace.hpp"
-#include "imgui.h"
 
 using namespace sf;
 namespace glxy
@@ -17,20 +16,32 @@ namespace glxy
         bool gradientDraw = false;
         bool gradientSetup = false;
 
+        bool shapeDraw = false;
+        IntRect prevShapeRenderArea;
+
+        bool textDraw = false;
+        IntRect prevTextRenderArea;
+
+        bool moveSelected = false;
         bool moveSelection = false;
-        IntRect newMoveSelectionArea;
+        IntRect newMoveSelectArea;
+
 
     public:
         mutable std::mutex mtxEditorWorkerCommon;
 
         bool getBucketFill() const;
         bool getWandFill() const;
+        bool getShapeDraw() const;
+        bool getTextDraw() const;
 
         bool getGradientDraw() const;
         bool getGradientSetup() const;
 
+        bool getMoveSelected() const;
         bool getMoveSelection() const;
-        IntRect getNewMoveSelectionArea() const;
+        IntRect getNewMoveSelectArea() const;
+
 
         bool hasUnfinishedChanges() const;
     };

@@ -7,16 +7,17 @@
 glxy::ImageChunkTexture::ImageChunkTexture(const ChunkManager& chunkManager, const ChunkID chunkID)
     : chunkSize(chunkManager.getChunkSize(chunkID)), chunkManager(chunkManager), chunkID(chunkID)
 {
-    lowTexture = make_unique<Texture>(Vector2u(
-        ceil(chunkSize.x / static_cast<float>(c_lowQualityChunkFactor)),
-        ceil(chunkSize.y / static_cast<float>(c_lowQualityChunkFactor)))
-    );
-    nativeTexture = make_unique<Texture>(chunkSize);
+    
 }
 
 const Texture* glxy::ImageChunkTexture::getNativeTexture() const
 {
     return nativeTexture.get();
+}
+
+const Texture* glxy::ImageChunkTexture::getMediumTexture() const
+{
+    return mediumTexture.get();
 }
 
 const Texture* glxy::ImageChunkTexture::getLowTexture() const
@@ -44,6 +45,11 @@ void glxy::ImageChunkTexture::deleteNativeQuality()
     nativeTexture.reset();
 }
 
+void glxy::ImageChunkTexture::deleteMediumQuality()
+{
+    mediumTexture.reset();
+}
+
 void glxy::ImageChunkTexture::setNativeSmooth(const bool smooth) const
 {
     nativeTexture->setSmooth(smooth);
@@ -59,21 +65,7 @@ void glxy::ImageChunkTexture::deleteSelectionTemp()
     selectionTempTexture.reset();
 }
 
-void glxy::ImageChunkTexture::RenderLayerToTexture(const Image& layer, const Vector2u chunkSize, const uint8_t transparency, const RenderStates& states, RenderTexture& texture)
-{
-    const Color color = Color(255, 255, 255, transparency);
-    const Vertex arr[4] = {
-        Vertex{Vector2f(0, 0), color, Vector2f(0, 0)},
-        Vertex{Vector2f(chunkSize.x, 0), color, Vector2f(1, 0)},
-        Vertex{Vector2f(chunkSize.x, chunkSize.y), color, Vector2f(1, 1)},
-        Vertex{Vector2f(0, chunkSize.y), color, Vector2f(0, 1)},
-    };
-    Texture temp;
-    validate(temp.loadFromImage(layer));
-    texture.draw(arr, 4, PrimitiveType::TriangleFan, RenderStates(states.blendMode, states.stencilMode, Transform::Identity, CoordinateType::Normalized, &temp, nullptr));
-}
-
-const Texture glxy::ImageChunkTexture::RenderChunk(const uint32_t resolution, const bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID) const
+Texture glxy::ImageChunkTexture::RenderChunk(const uint32_t resolution, const bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID) const
 {
     const Vector2u size = Vector2u(max(getSize().x / resolution, 1U), max(getSize().y / resolution, 1U));
     RenderTexture renderTexture;
@@ -137,6 +129,13 @@ void glxy::ImageChunkTexture::RenderLowQuality(const bool overrideWithTempLayer,
 {
     lowTexture = make_unique<Texture>(RenderChunk(c_lowQualityChunkFactor, overrideWithTempLayer, tempLayerBlendMode, layerID));
     lowTexture->setSmooth(true);
+}
+
+void glxy::ImageChunkTexture::RenderMediumQuality(const bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode,
+    LayerID layerID)
+{
+    mediumTexture = make_unique<Texture>(RenderChunk(c_mediumQualityChunkFactor, overrideWithTempLayer, tempLayerBlendMode, layerID));
+    mediumTexture->setSmooth(true);
 }
 
 void glxy::ImageChunkTexture::RenderNativeQuality(const bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID)

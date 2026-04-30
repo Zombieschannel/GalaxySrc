@@ -16,11 +16,14 @@ PopUpTitle[14],Save before exit?,
 PopUpTitle[15],Save before close?,
 PopUpTitle[16],Adjustment,
 PopUpTitle[17],Effect,
-OtherType[0],Changelog,Änderungsprotokoll
-OtherType[1],</> Future plans,</> Zukunftspläne
-OtherType[2],OpenGL info,OpenGL Info
-OtherType[3],Debug mode,
-OtherType[4],About,Über
+PopUpTitle[18],,
+PopUpTitle[19],Grid bold,
+PopUpTitle[20],Search,
+otherMenu[0],Changelog,Änderungsprotokoll
+otherMenu[1],</> Future plans,</> Zukunftspläne
+otherMenu[2],OpenGL info,OpenGL Info
+otherMenu[3],Debug mode,
+otherMenu[4],About,Über
 fileMenu[0],New image,Neues Bild
 fileMenu[1],Open image,Bild öffnen
 fileMenu[2],Save image,Bild speichern
@@ -49,22 +52,35 @@ shortcut[15],Cut,Ausschneiden
 shortcut[16],Deselect all,Auswahl aufheben
 shortcut[17],Transform image,Bild transformieren
 shortcut[18],Debug mode,
+shortcut[19],Crop,
+shortcut[20],Search,
 setupOption[0],New image,Neues Bild
 setupOption[1],Open,Öffnen
 setupOption[2],Settings,Einstellungen
 editMenu[0],Copy,Kopieren
 editMenu[1],Cut,Ausschneiden
 editMenu[2],Paste,Einfügen
-editMenu[3],Select all,Alles auswählen
+editMenu[3],Select,
 editMenu[4],Deselect all,Auswahl aufheben
 editMenu[5],Delete,Löschen
+selectSubmenu[0],Select all,
+selectSubmenu[1],Select left half,
+selectSubmenu[2],Select right half,
+selectSubmenu[3],Select top half,
+selectSubmenu[4],Select bottom half,
+selectSubmenu[5],Select top left quarter,
+selectSubmenu[6],Select top right quarter,
+selectSubmenu[7],Select bottom left quarter,
+selectSubmenu[8],Select bottom right quarter,
 viewMenu[0],Zoom in,hineinzoomen
 viewMenu[1],Zoom out,herauszoomen
 viewMenu[2],Zoom,Zoomen
-viewMenu[3],Grid,Raster
-viewMenu[4],Ruler,Lineal
-viewMenu[5],Actual size,Originalgröße
-viewMenu[6],Sync image viewports,Bildansichten synchronisieren
+viewMenu[3],Open window,
+viewMenu[4],Grid,Raster
+viewMenu[5],Grid bold,
+viewMenu[6],Ruler,Lineal
+viewMenu[7],Actual size,Originalgröße
+viewMenu[8],Sync image viewports,Bildansichten synchronisieren
 imageMenu[0],Crop to selection,Auf Auswahl zuschneiden
 imageMenu[1],Resize,Größe ändern
 imageMenu[2],Resize canvas,Arbeitsfläche ändern
@@ -95,16 +111,21 @@ effectMenu[3],Add white noise,
 effectMenu[4],Add fractal noise,
 toolName[0],Box select,Rechteckige Auswahl
 toolName[1],Circle select,Kreis Auswahl
-toolName[2],Zoom,Zoomen
-toolName[3],Pan,Schwenken
-toolName[4],Move selected,Ausgewählte verschieben
-toolName[5],Magic wand,Zauberstab
-toolName[6],Pencil,Bleistift
-toolName[7],Picker,Farbpicker
-toolName[8],Brush,Pinsel
-toolName[9],Eraser,Radiergummi
-toolName[10],Bucket,Füllwerkzeug
-toolName[11],Gradient,Verlauf
+toolName[2],Lasso select,
+toolName[3],Zoom,Zoomen
+toolName[4],Pan,Schwenken
+toolName[5],Picker,Farbpicker
+toolName[6],Move selected,Ausgewählte verschieben
+toolName[7],Move selection,
+toolName[8],Magic wand,Zauberstab
+toolName[9],Pencil,Bleistift
+toolName[10],Brush,Pinsel
+toolName[11],Eraser,Radiergummi
+toolName[12],Bucket,Füllwerkzeug
+toolName[13],Gradient,Verlauf
+toolName[14],Color swap,
+toolName[15],Shapes,
+toolName[16],Text,
 blendModeName[0],Blend none,Blend kein
 blendModeName[1],Blend add,Blend hinzufügen
 blendModeName[2],Blend alpha,Blend alpha
@@ -128,6 +149,45 @@ layerToolTip[6],Layer properties,Ebeneneigenschaften
 panMouseButton[0],Middle button,
 panMouseButton[1],Extra button 1,
 panMouseButton[2],Extra button 2,
+shapeName[0],Rectangle,
+shapeName[1],Rounded rect,
+shapeName[2],Circle,
+shapeName[3],Triangle,
+shapeName[4],Diamond,
+shapeName[5],Pentagon,
+shapeName[6],Hexagon,
+shapeName[7],Octagon,
+shapeName[8],3pt star,
+shapeName[9],4pt star,
+shapeName[10],5pt star,
+shapeName[11],Arrow,
+shapeName[12],Heart,
+shapeName[13],Lightning,
+shapeName[14],Spade,
+shapeName[15],Club,
+windowName[0],Tool picker,
+windowName[1],Color picker,
+windowName[2],Layers,
+Text,Text,
+Copy to clipboard,Copy to clipboard,
+Shape,Shape,
+More,More,
+Outline thickness,Outline thickness,
+Font,Font,
+Font location,Font location,
+Size,Size,
+Bold,Bold,
+Italic,Italic,
+Underlined,Underlined,
+Strikethrough,Strikethrough,
+Align left,Align left,
+Align center,Align center,
+Align right,Align right,
+Letter spacing,Letter spacing,
+Line spacing,Line spacing,
+Grid bold size,Grid bold size,
+Infinite,Infinite,
+Fixed size,Fixed size,
 Show color picker in triangle style,Show color picker in triangle style,
 Angle,Angle,
 Smoothness,Smoothness,
@@ -247,6 +307,6 @@ glxyAbout4,English: Zombieschannel,Englisch: Zombieschannel
 glxyAbout5,German: Vito,Deutsch: Vito
 glxyAbout6,Made by Zombieschannel,Hergestellt von Zombieschannel
 glxyAbout7,"Galaxy version: %s, build: %d, architecture: %s","Galaxy-Version: %s, erstellen: %d, Architektur: %s"
-glxyAbout8,SFML version: %d.%d.%d,SFML-Version: %d.%d.%d
+glxyAbout8,SFML version: %s,SFML-Version: %s
 glxyAbout9,ImGui version: %s,ImGui-Version: %s
 glxyAbout10,Galaxy startup time: %d ms,Galaxy-Startzeit: %d ms

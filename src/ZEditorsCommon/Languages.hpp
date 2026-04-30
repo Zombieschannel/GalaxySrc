@@ -1,11 +1,12 @@
 #pragma once
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 #include <sstream>
 
-static const std::vector<std::string> c_languageNames = { "English", "Deutsch" };
+constexpr std::array<std::string_view, 2> c_languageNames = { "English", "Deutsch" };
 
 class LL //language loader
 {
@@ -43,27 +44,30 @@ public:
 						temp.pop_back();
 					if (temp.empty())
 					{
-						if (!get().strings[key].front().empty())
-							std::cerr << "Missing " << c_languageNames[get().strings[key].size()] << " translation for entry " << key << std::endl;
-						get().strings[key].push_back(get().strings[key].front());
+						if (!get().strings.at(key).front().empty())
+							std::cout << "Missing " << c_languageNames.at(get().strings.at(key).size()) << " translation for entry " << key << std::endl;
+						get().strings.at(key).push_back(get().strings.at(key).front());
 					}
 					else
-						get().strings[key].push_back(temp);
+						get().strings.at(key).push_back(temp);
 					temp.clear();
 				}
-				else if (line[j] == '\"')
+				else if (line.at(j) == '\"')
 					openQuote = !openQuote;
-				else if (line[j] == ',' && !openQuote)
+				else if (line.at(j) == ',' && !openQuote)
 				{
 					if (!itemID)
+					{
 						key = temp;
+						get().strings.try_emplace(key);
+					}
 					else
-						get().strings[key].push_back(temp);
+						get().strings.at(key).push_back(temp);
 					itemID++;
 					temp.clear();
 				}
 				else
-					temp += line[j];
+					temp += line.at(j);
 			}
 			i++;
 		}
@@ -74,18 +78,18 @@ public:
 	}
 	static const char* c_str(const std::string& name)
 	{
-		return get().strings[name][get().languageID].c_str();
+		return get().strings.at(name).at(get().languageID).c_str();
 	}
 	static const std::string& str(const std::string& name)
 	{
-		return get().strings[name][get().languageID];
+		return get().strings.at(name).at(get().languageID);
 	}
 	template<typename T>
 	static const std::string& ind(const std::string& name, const T index)
 	{
 		std::string t = name;
 		t.insert(t.find('[') + 1, std::to_string(index));
-		return get().strings[t][get().languageID];
+		return get().strings.at(t).at(get().languageID);
 	}
 };
 

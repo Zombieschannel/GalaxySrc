@@ -29,9 +29,9 @@ glxy::EffectFractalNoise::EffectFractalNoise(const int32_t octaves, const float 
 {
 }
 
-std::optional<Color> glxy::ImageEffects::getColor(const Vector2i pos, const array<const Image*, 9>& chunks)
+std::optional<Color32f> glxy::ImageEffects::getColor(const Vector2i pos, const array<const Image*, 9>& chunks)
 {
-    static const array<Vector2i, 9> chunkOffsets = {
+    const array chunkOffsets = {
         Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
         Vector2i(-1, 0), Vector2i(0, 0), Vector2i(1, 0),
         Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1)
@@ -66,7 +66,7 @@ std::optional<Color> glxy::ImageEffects::getColor(const Vector2i pos, const arra
     return chunks.at(ID)->getPixel(Vector2u(coord));
 }
 
-Color glxy::ImageEffects::GaussBlur(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectGaussBlur& data)
+Color32f glxy::ImageEffects::GaussBlur(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectGaussBlur& data)
 {
     if (chunks.at(4) == nullptr)
         return Color::Transparent;
@@ -75,7 +75,7 @@ Color glxy::ImageEffects::GaussBlur(const Vector2i offset, const array<const Ima
     for (int16_t x = offset.x - data.radius; x <= offset.x + data.radius; x++)
         for (int16_t y = offset.y - data.radius; y <= offset.y + data.radius; y++)
         {
-            const std::optional<Color> color = getColor(Vector2i(x, y), chunks);
+            const std::optional<Color32f> color = getColor(Vector2i(x, y), chunks);
             if (!color.has_value())
                 continue;
             const float weight = static_cast<float>(data.values.at(x - (offset.x - data.radius))) * data.values.at(y - (offset.y - data.radius));
@@ -85,14 +85,14 @@ Color glxy::ImageEffects::GaussBlur(const Vector2i offset, const array<const Ima
             sum.at(3) += color->a * weight;
             count += weight;
         }
-    return Color(sum.at(0) / count, sum.at(1) / count, sum.at(2) / count, sum.at(3) / count);
+    return Color32f(sum.at(0) / count, sum.at(1) / count, sum.at(2) / count, sum.at(3) / count);
 }
 
-Color glxy::ImageEffects::BoxBlur(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectBoxBlur& data, EffectBoxBlur::Cache& cache)
+Color32f glxy::ImageEffects::BoxBlur(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectBoxBlur& data, EffectBoxBlur::Cache& cache)
 {
     if (chunks.at(4) == nullptr)
         return Color::Transparent;
-    array<int32_t, 4> sum = {};
+    array<float, 4> sum = {};
     int32_t count = 0;
     const std::optional<IntRect> inter =
         IntRect(Vector2i(cache.pos.x - data.radius, cache.pos.y - data.radius), Vector2i(data.radius * 2 + 1, data.radius * 2 + 1)).findIntersection(
@@ -102,7 +102,7 @@ Color glxy::ImageEffects::BoxBlur(const Vector2i offset, const array<const Image
         for (int16_t x = offset.x - data.radius; x <= offset.x + data.radius; x++)
             for (int16_t y = offset.y - data.radius; y <= offset.y + data.radius; y++)
             {
-                const std::optional<Color> color = getColor(Vector2i(x, y), chunks);
+                const std::optional<Color32f> color = getColor(Vector2i(x, y), chunks);
                 if (!color.has_value())
                     continue;
                 sum.at(0) += color->r;
@@ -114,7 +114,7 @@ Color glxy::ImageEffects::BoxBlur(const Vector2i offset, const array<const Image
         cache.pos = offset;
         cache.sum = sum;
         cache.count = count;
-        return Color(sum.at(0) / count, sum.at(1) / count, sum.at(2) / count, sum.at(3) / count);
+        return Color32f(sum.at(0) / count, sum.at(1) / count, sum.at(2) / count, sum.at(3) / count);
     }
     sum = cache.sum;
     count = cache.count;
@@ -132,7 +132,7 @@ Color glxy::ImageEffects::BoxBlur(const Vector2i offset, const array<const Image
     const Vector2i diff = offset - cache.pos;
     auto func = [&](const int16_t x, const int16_t y, const bool add)
     {
-        const std::optional<Color> color = getColor(Vector2i(x, y), chunks);
+        const std::optional<Color32f> color = getColor(Vector2i(x, y), chunks);
         if (!color.has_value())
             return;
         if (add)
@@ -173,18 +173,18 @@ Color glxy::ImageEffects::BoxBlur(const Vector2i offset, const array<const Image
     cache.pos = offset;
     cache.sum = sum;
     cache.count = count;
-    return Color(sum.at(0) / count, sum.at(1) / count, sum.at(2) / count, sum.at(3) / count);
+    return Color32f(sum.at(0) / count, sum.at(1) / count, sum.at(2) / count, sum.at(3) / count);
 }
 
-Color glxy::ImageEffects::DirectionalBlur(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectDirectionalBlur& data)
+Color32f glxy::ImageEffects::DirectionalBlur(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectDirectionalBlur& data)
 {
     if (chunks.at(4) == nullptr)
         return Color::Transparent;
-    array<int32_t, 4> sum = {};
+    array<float, 4> sum = {};
     int32_t count = 0;
     for (int16_t i = -data.radius; i <= data.radius; i++)
     {
-        const std::optional<Color> color = getColor(offset + Vector2i(cosf(data.angle) * i + 0.5f, sinf(data.angle) * i + 0.5f), chunks);
+        const std::optional<Color32f> color = getColor(offset + Vector2i(cosf(data.angle) * i + 0.5f, sinf(data.angle) * i + 0.5f), chunks);
         if (!color.has_value())
             continue;
         sum.at(0) += color->r;
@@ -193,31 +193,33 @@ Color glxy::ImageEffects::DirectionalBlur(const Vector2i offset, const array<con
         sum.at(3) += color->a;
         count++;
     }
-    return Color(sum.at(0) / count, sum.at(1) / count, sum.at(2) / count, sum.at(3) / count);
+    return Color32f(sum.at(0) / count, sum.at(1) / count, sum.at(2) / count, sum.at(3) / count);
 }
 
-Color glxy::ImageEffects::WhiteNoise(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectWhiteNoise& data)
+Color32f glxy::ImageEffects::WhiteNoise(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectWhiteNoise& data)
 {
     if (chunks.at(4) == nullptr)
         return Color::Transparent;
     const float random = static_cast<float>((*data.generator)()) / data.generator->max();
     if (data.frequency <= random)
         return Color::Transparent;
-    float r, g, b;
-    const float hRand = static_cast<float>((*data.generator)()) / data.generator->max();
-    const float vRand = static_cast<float>((*data.generator)()) / data.generator->max();
-    ImGui::ColorConvertHSVtoRGB(hRand, data.saturation, vRand, r, g, b);
-    return Color(r * 255, g * 255, b * 255, data.intensity * 255.f);
+    HSV32f hsv;
+    hsv.h = static_cast<float>((*data.generator)()) / data.generator->max() * 359.9999f;
+    hsv.s = data.saturation;
+    hsv.v = static_cast<float>((*data.generator)()) / data.generator->max();
+    hsv.a = data.intensity;
+
+    return toColor32f(hsv);
 }
 
-Color glxy::ImageEffects::FractalNoise(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectFractalNoise& data)
+Color32f glxy::ImageEffects::FractalNoise(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectFractalNoise& data)
 {
     if (data.octaves == 0)
         return Color::Transparent;
     float noise = 0;
     float scale = 1;
     float sum = 0;
-    for (int32_t k = 0; k < data.octaves; k++)
+    for (int8_t k = 0; k < data.octaves; k++)
     {
         const int32_t pitch = max(data.size.x, data.size.y) >> k;
         const int32_t sampleX1 = (offset.x / pitch) * pitch;
@@ -262,7 +264,7 @@ void glxy::ImageEffects::Effect(const array<ImageChunk*, 9>& chunks, const Vecto
             if (chunks.at(4)->hasSelectionLayer() && !chunks.at(4)->getPixelSelection(Vector2u(targetPixel)))
                 continue;
 
-            Color outColor;
+            Color32f outColor;
             switch (effect)
             {
             case Effects::GaussianBlur: outColor = GaussBlur(targetPixel, arr, reinterpret_cast<const EffectGaussBlur&>(*data)); break;

@@ -1,5 +1,4 @@
 #include "ImageAdjustments.hpp"
-#include "imgui.h"
 #include <algorithm>
 #include <cmath>
 
@@ -17,45 +16,50 @@ glxy::AdjustTint::AdjustTint(const float r, const float g, const float b)
 {
 }
 
-Color glxy::ImageAdjustments::BlackAndWhite(const Color color)
+Color32f glxy::ImageAdjustments::BlackAndWhite(const Color32f color)
 {
-    const int16_t sum = (color.r + color.g + color.b) / 3;
-    return Color(sum, sum, sum, color.a);
+    const float sum = (color.r + color.g + color.b) / 3.f;
+    return Color32f(sum, sum, sum, color.a);
 }
 
-Color glxy::ImageAdjustments::BrightnessContrast(const Color color, const AdjustBrightnessContrast& data)
+Color32f glxy::ImageAdjustments::BrightnessContrast(const Color32f color, const AdjustBrightnessContrast& data)
 {
-    Vector3f c = Vector3f(color.r / 255.f + 1e-6f, color.g / 255.f + 1e-6f, color.b / 255.f + 1e-6f);
-    const float val = ((c.x + c.y + c.z) / 3.f - 0.5f) * (powf(10, data.contrast * 8)) + 0.5f;
-    const float scale = val / ((c.x + c.y + c.z) / 3.f);
-    c.x = std::clamp(c.x * scale + data.brightness, 0.f, 1.f);
-    c.y = std::clamp(c.y * scale + data.brightness, 0.f, 1.f);
-    c.z = std::clamp(c.z * scale + data.brightness, 0.f, 1.f);
-    return Color(c.x * 255, c.y * 255, c.z * 255, color.a);
+    Color32f c = Color32f(color.r + 1e-6f, color.g + 1e-6f, color.b + 1e-6f);
+    const float val = ((c.r + c.g + c.b) / 3.f - 0.5f) * (powf(10, data.contrast * 8)) + 0.5f;
+    const float scale = val / ((c.r + c.g + c.b) / 3.f);
+    c.r = std::clamp(c.r * scale + data.brightness, 0.f, 1.f);
+    c.g = std::clamp(c.g * scale + data.brightness, 0.f, 1.f);
+    c.b = std::clamp(c.b * scale + data.brightness, 0.f, 1.f);
+    c.a = color.a;
+    return c;
 }
 
-Color glxy::ImageAdjustments::HSV(const Color color, const AdjustHSV& data)
+Color32f glxy::ImageAdjustments::HSV(const Color32f color, const AdjustHSV& data)
 {
-    float h, s, v, r, g, b;
-    ImGui::ColorConvertRGBtoHSV(color.r / 255.f, color.g / 255.f, color.b / 255.f, h, s, v);
-    h += data.hue;
-    s += data.saturation;
-    v += data.value;
-    h = fmod(h, 1.f);
-    ImGui::ColorConvertHSVtoRGB(std::clamp(h, 0.f, 1.f), std::clamp(s, 0.f, 1.f), std::clamp(v, 0.f, 1.f), r, g, b);
-    return Color(r * 255, g * 255, b * 255, color.a);
+    HSV32f hsv = toHSV32f(color);
+    hsv.h += data.hue;
+    if (hsv.h != 0.f || hsv.s != 0.f)
+        hsv.s += data.saturation;
+    hsv.v += data.value;
+    hsv.h = fmodf(hsv.h, 360.f);
+    if (hsv.h < 0.f)
+        hsv.h += 360.f;
+    hsv.h = std::clamp(hsv.h, 0.f, 360.f);
+    hsv.s = std::clamp(hsv.s, 0.f, 1.f);
+    hsv.v = std::clamp(hsv.v, 0.f, 1.f);
+    return toColor32f(hsv);
 }
 
-Color glxy::ImageAdjustments::Invert(const Color color)
+Color32f glxy::ImageAdjustments::Invert(const Color32f color)
 {
-    return Color(255 - color.r, 255 - color.g, 255 - color.b, color.a);
+    return Color32f(1.f - color.r, 1.f - color.g, 1.f - color.b, color.a);
 }
 
-Color glxy::ImageAdjustments::Tint(const Color color, const AdjustTint& data)
+Color32f glxy::ImageAdjustments::Tint(const Color32f color, const AdjustTint& data)
 {
-    return Color(std::clamp(color.r + data.r * 255, 0.f, 255.f),
-        std::clamp(color.g + data.g * 255, 0.f, 255.f),
-        std::clamp(color.b + data.b * 255, 0.f, 255.f), color.a);
+    return Color32f(std::clamp(color.r + data.r, 0.f, 1.f),
+        std::clamp(color.g + data.g, 0.f, 1.f),
+        std::clamp(color.b + data.b, 0.f, 1.f), color.a);
 }
 
 void glxy::ImageAdjustments::Adjust(ImageChunk& chunk, const LayerID layerID, const IntRect& area, const Adjustments adjustment, const AdjustmentData* data)
@@ -65,8 +69,8 @@ void glxy::ImageAdjustments::Adjust(ImageChunk& chunk, const LayerID layerID, co
         {
             if (chunk.hasSelectionLayer() && !chunk.getPixelSelection(Vector2u(x, y)))
                 continue;
-            const Color inColor = chunk.getPixelColor(layerID, Vector2u(x, y));
-            Color outColor;
+            const Color32f inColor = chunk.getPixelColor(layerID, Vector2u(x, y));
+            Color32f outColor;
             switch (adjustment)
             {
             case Adjustments::BlackAndWhite: outColor = BlackAndWhite(inColor); break;

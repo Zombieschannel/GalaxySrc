@@ -23,6 +23,8 @@ enum class ActionShortcut : int8_t
     DeselectAll,
     TransformImage,
     Debug,
+    Crop,
+    Search,
     Count
 };
 
@@ -61,6 +63,8 @@ public:
             shortcuts.at(ActionShortcut::DeselectAll) = (1 << 21) | static_cast<uint32_t>(Keyboard::Key::D);
             shortcuts.at(ActionShortcut::TransformImage) = (1 << 21) | (1 << 23) | static_cast<uint32_t>(Keyboard::Key::T);
             shortcuts.at(ActionShortcut::Debug) = static_cast<uint32_t>(Keyboard::Key::F3);
+            shortcuts.at(ActionShortcut::Crop) = (1 << 21) | (1 << 23) | static_cast<uint32_t>(Keyboard::Key::X);
+            shortcuts.at(ActionShortcut::Search) = static_cast<uint32_t>(Keyboard::Key::Space);
         }
     }
     static string getKeyName(Keyboard::Key key)

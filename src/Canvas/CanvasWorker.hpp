@@ -1,7 +1,6 @@
 #pragma once
 #include "../Namespace.hpp"
 #include "ImageEditorWorker.hpp"
-#include "../Rendering/RenderWorker.hpp"
 #include <mutex>
 #include <thread>
 #include <condition_variable>
@@ -32,9 +31,9 @@ namespace glxy
         struct FinishEraser {};
         struct ImageEmpty { Vector2u resolution; Color color; };
         struct ImageOpen { filesystem::path path; };
-        struct ClipboardCopy { Image* image; Vector2u* location; LayerID layerID; };
-        struct ClipboardPaste { Image* image; Vector2u* location; LayerID layerID; Transform transform; };
-        struct SelectAll {};
+        struct ClipboardCopy { Image* image; Vector2u* location; Image* selection; LayerID layerID; };
+        struct ClipboardPaste { Image* image; Vector2u* location; Image* selection; LayerID layerID; Transform transform; };
+        struct SelectArea { FloatRect area; };
         struct DeselectAll {};
         struct DeleteSelected { LayerID layerID; };
         struct CropSelection {};
@@ -46,18 +45,22 @@ namespace glxy
         struct RescaleCanvas { Vector2u size; RescaleMethod method; };
         struct ResizeCanvas { Vector2u size; Pivot pivot; };
         struct TransformImage { Vector2f pos; float rot; Vector2f scale; Vector2f origin; bool tile; };
-        struct DrawPixels { Vector2f start, end; Color color; LayerID layerID; };
+        struct PencilPixels { Vector2f start, end; Color color; LayerID layerID; };
         struct BrushPixels { Vector2f start, end; Color color; float radius; LayerID layerID; };
         struct EraserPixels { Vector2f start, end; float radius; LayerID layerID; };
+        struct ColorSwapPixels { Vector2f start, end; Color color1, color2; float radius; int8_t tol; LayerID layerID; };
         struct GradientPixels { Vector2f start, end; Color color1, color2; LayerID layerID; };
+        struct ShapePixels { shared_ptr<ConvexShape> shape; LayerID layerID; };
+        struct TextPixels { shared_ptr<Font> font; shared_ptr<Text> text; FloatRect globalBounds; LayerID layerID; };
         struct BeginSelect { Vector2f pos; SelectMode selectMode; ShapeSelectType type; bool keepAspect; };
-        struct EndSelect { Vector2f pos; };
+        struct EndSelect { Vector2f pos; ShapeSelectType type; };
         struct BucketFill { Vector2i pos; Color col; int8_t tol; LayerID layerID; };
         struct WandFill { Vector2u pos; int8_t tol; LayerID layerID; };
         struct LayerPropertyChanged { LayerID layerID; bool enabled; uint8_t transparency; uint8_t blendMode; };
         struct GradientSetup {};
         struct GradientFinishSetup {};
-        struct MovePixels { Transform transform; LayerID layerID; };
+        struct MovePixels { Transform transform; Vector2f scale; LayerID layerID; };
+        struct MoveSelection { Transform transform; Vector2f scale; LayerID layerID; };
         struct ExitThread {};
 
         CanvasWork();
@@ -97,7 +100,7 @@ namespace glxy
             ImageOpen,
             ClipboardCopy,
             ClipboardPaste,
-            SelectAll,
+            SelectArea,
             DeselectAll,
             DeleteSelected,
             CropSelection,
@@ -109,10 +112,13 @@ namespace glxy
             RescaleCanvas,
             ResizeCanvas,
             TransformImage,
-            DrawPixels,
+            PencilPixels,
             BrushPixels,
             EraserPixels,
+            ColorSwapPixels,
             GradientPixels,
+            ShapePixels,
+            TextPixels,
             BeginSelect,
             EndSelect,
             BucketFill,
@@ -121,6 +127,7 @@ namespace glxy
             GradientSetup,
             GradientFinishSetup,
             MovePixels,
+            MoveSelection,
             ExitThread> work;
         EditorID editorID = 0;
     };
@@ -146,7 +153,7 @@ namespace glxy
     class CanvasExtendedWork : public CanvasWork
     {
     public:
-        ChunkID chunkID = 0;
+        int32_t chunkID = 0;
 
         CanvasExtendedWork();
 
@@ -190,7 +197,7 @@ namespace glxy
         static void ExitThread();
         static void LockAddingNewWork(bool lock);
         static void AddWork(const CanvasWork& work, EditorID editorID);
-        static void AddEditor();
+        static void AddEditor(bool infinite);
         static void RemoveEditor(EditorID editorID);
         static void Setup();
     };

@@ -1,6 +1,7 @@
 #pragma once
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <map>
 #include <unordered_map>
 #include <fstream>
@@ -10,6 +11,7 @@
 #include <vector>
 #include <array>
 using std::string;
+using std::string_view;
 using std::to_string;
 using std::vector;
 using std::cout;

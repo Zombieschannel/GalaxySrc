@@ -10,15 +10,9 @@
 #endif
 
 #include <filesystem>
+
+#if !defined(SFML_SYSTEM_EMSCRIPTEN) && !defined(SFML_SYSTEM_ANDROID)
 #include "../whereami/whereami.h"
-
-#ifdef SFML_SYSTEM_LINUX
-namespace LinuxStuff
-{
-#include <X11/Xlib.h>
-}
-#endif
-
 void setWorkingDirectory()
 {
     int32_t dirName_length;
@@ -38,6 +32,20 @@ void setWorkingDirectory()
 
     }
 }
+#else
+void setWorkingDirectory()
+{
+
+}
+#endif
+
+#ifdef SFML_SYSTEM_LINUX
+namespace LinuxStuff
+{
+#include <X11/Xlib.h>
+}
+#endif
+
 int32_t main(int32_t argc, char* argv[])
 {
 #ifdef SFML_SYSTEM_LINUX
@@ -102,5 +110,5 @@ int32_t main(int32_t argc, char* argv[])
 
     glxy::App app;
     app.Start(startParams, openWithGalaxy, startUpTime);
-    err() << "Exit" << endl;
+    cout << "Exit" << endl;
 }

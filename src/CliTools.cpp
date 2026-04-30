@@ -21,6 +21,7 @@ void glxy::CLITools::Error(const CLIAction action, const ErrorType error)
     case CLIAction::Input: err() << "Input: "; break;
     case CLIAction::Resize: err() << "Resize: "; break;
     case CLIAction::Rescale: err() << "Rescale: "; break;
+    default: break;
     }
     switch (error)
     {
@@ -29,6 +30,7 @@ void glxy::CLITools::Error(const CLIAction action, const ErrorType error)
     case ErrorType::InvalidPath: err() << "Invalid path"; break;
     case ErrorType::InvalidMethod: err() << "Invalid method"; break;
     case ErrorType::InvalidPivot: err() << "Invalid pivot"; break;
+    default: break;
     }
     err() << " (-h for help)" << endl;
 }
@@ -128,10 +130,10 @@ int32_t glxy::CLITools::ActionHandler(const CLIAction action, const vector<strin
         if (verify)
             return 0;
         CanvasWorker::waitWork();
-        CanvasWorker::AddEditor();
+        CanvasWorker::AddEditor(false);
         editorCount++;
         activeEditor = editorCount - 1;
-        layerPicker.createNewImage();
+        layerPicker.createNewImage(false);
         CanvasWorker::AddWork(CanvasWork::ImageEmpty{Vector2u(vec2i), Color::White}, activeEditor);
         break;
     case CLIAction::Input:
@@ -144,10 +146,10 @@ int32_t glxy::CLITools::ActionHandler(const CLIAction action, const vector<strin
         if (verify)
             return 0;
         CanvasWorker::waitWork();
-        CanvasWorker::AddEditor();
+        CanvasWorker::AddEditor(false);
         editorCount++;
         activeEditor = editorCount - 1;
-        layerPicker.createNewImage();
+        layerPicker.createNewImage(false);
         CanvasWorker::AddWork(CanvasWork::ImageOpen{str}, activeEditor);
         break;
     case CLIAction::Output:

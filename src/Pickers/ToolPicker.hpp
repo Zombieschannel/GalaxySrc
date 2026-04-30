@@ -7,16 +7,21 @@ enum class Tool : uint8_t
 {
     BoxSelect,
     CircleSelect,
+    LassoSelect,
     Zoom,
     Pan,
+    Picker,
+    MoveSelected,
     MoveSelection,
     MagicWand,
     Pencil,
-    Picker,
     Brush,
     Eraser,
     Bucket,
     Gradient,
+    ColorSwap,
+    Shapes,
+    Text,
     Count
 };
 
@@ -31,18 +36,22 @@ class ToolPicker
 {
     const float& GUIScale;
     const bool& rulerEnabled;
+    uint32_t toolsEnabled = 0xFFFFFF;
     Tool currentTool = Tool::Pencil;
     bool toolHasChanged = false;
     bool userChange = false;
     const Texture& toolIcons;
+    int8_t toolEnabledCount = 0;
+
 public:
-    float brushRadius = 5.f;
-    float eraserRadius = 5.f;
+    bool windowOpen = true;
     SelectMode selectMode = SelectMode::Single;
     ToolPicker(const float& GUIScale, const bool& rulerEnabled, const Texture& toolIcons);
 
     Tool getTool() const;
+    uint16_t getToolsEnabled() const;
     void setTool(Tool currentTool, bool userChange = true);
+    void setToolsEnabled(uint32_t tools);
     bool wasUserChanged() const;
     void Draw();
 };

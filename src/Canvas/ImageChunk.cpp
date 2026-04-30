@@ -2,12 +2,9 @@
 #include "../Const.hpp"
 #include "../Func.hpp"
 #include <SFML/OpenGL.hpp>
-#include <cmath>
 
-#include "../Rendering/RenderWorker.hpp"
-
-glxy::ImageChunk::ImageChunk(const Vector2u chunkSize)
-    : chunkSize(chunkSize)
+glxy::ImageChunk::ImageChunk(const Vector2u chunkSize, const Vector2i chunkPosition)
+    : chunkSize(chunkSize), chunkPosition(chunkPosition)
 {
     mtxImageChunks = make_unique<std::mutex>();
 }
@@ -52,6 +49,11 @@ bool glxy::ImageChunk::needsUpdateColorLow() const
     return needUpdateColorLow;
 }
 
+bool glxy::ImageChunk::needsUpdateColorMedium() const
+{
+    return needUpdateColorMedium;
+}
+
 bool glxy::ImageChunk::needsUpdateColorNative() const
 {
     return needUpdateColorNative;
@@ -92,6 +94,11 @@ Vector2u glxy::ImageChunk::getSize() const
     return chunkSize;
 }
 
+Vector2i glxy::ImageChunk::getChunkPosition() const
+{
+    return chunkPosition;
+}
+
 void glxy::ImageChunk::addLayer(const LayerID layerID, const Color color)
 {
     colorLayer.insert(colorLayer.begin() + layerID, Image(getSize(), color));
@@ -102,6 +109,7 @@ void glxy::ImageChunk::duplicateLayer(const LayerID layerID)
     colorLayer.insert(colorLayer.begin() + layerID + 1, Image(getSize(), Color::Transparent));
     validate(colorLayer.at(layerID + 1).copy(colorLayer.at(layerID), Vector2u()));
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -109,6 +117,7 @@ void glxy::ImageChunk::deleteLayer(const LayerID layerID)
 {
     colorLayer.erase(colorLayer.begin() + layerID);
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -116,6 +125,7 @@ void glxy::ImageChunk::moveLayerUp(const LayerID layerID)
 {
     std::swap(colorLayer.at(layerID), colorLayer.at(layerID + 1));
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -123,18 +133,31 @@ void glxy::ImageChunk::moveLayerDown(const LayerID layerID)
 {
     std::swap(colorLayer.at(layerID), colorLayer.at(layerID - 1));
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
-void glxy::ImageChunk::mergeLayerDown(const LayerID layerID, const uint8_t blendMode, const uint8_t transparency)
+void glxy::ImageChunk::mergeLayerDown(const LayerID lowerLayerID, const LayerID upperLayerID, const uint8_t blendModeLower,
+    const uint8_t blendModeUpper, const uint8_t transparency)
 {
-    const unique_ptr<RenderResult> result = RenderWorker::getResult();
-    const auto v = result->get<RenderResult::Chunk>();
-    if (!v) return;
-    validate(colorLayer.at(layerID - 1).copy(v->img, Vector2u()));
-    RenderWorker::RemoveResult();
-    colorLayer.erase(colorLayer.begin() + layerID);
+    RenderTexture renderTexture;
+    validate(renderTexture.resize(chunkSize, {0U, 0U, 0U}));
+
+    renderTexture.clear(Color::Transparent);
+    renderTexture.setView(View(FloatRect({0.f, 0.f}, Vector2f(chunkSize))));
+
+    RenderLayerToTexture(colorLayer.at(lowerLayerID), chunkSize, 255, c_blendModes.at(blendModeLower), renderTexture);
+    RenderLayerToTexture(colorLayer.at(upperLayerID), chunkSize, transparency, c_blendModes.at(blendModeUpper), renderTexture);
+
+    renderTexture.display();
+
+    const Image image = renderTexture.getTexture().copyToImage();
+
+    validate(colorLayer.at(lowerLayerID).copy(image, Vector2u()));
+
+    colorLayer.erase(colorLayer.begin() + upperLayerID);
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -151,6 +174,7 @@ void glxy::ImageChunk::clearColorTempLayer(const Color color) const
 {
     colorTempLayer->resize(colorTempLayer->getSize(), color);
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -158,6 +182,7 @@ void glxy::ImageChunk::deleteColorTempLayer()
 {
     colorTempLayer.reset();
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -207,6 +232,7 @@ void glxy::ImageChunk::setPixelColor(const LayerID layerID, const Vector2u coord
 {
     colorLayer.at(layerID).setPixel(coord, color);
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -214,6 +240,7 @@ void glxy::ImageChunk::setPixelColorTemp(const Vector2u coord, const Color color
 {
     colorTempLayer->setPixel(coord, color);
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -253,6 +280,7 @@ void glxy::ImageChunk::PasteColorImage(const LayerID layerID, const Image& src, 
 {
     validate(colorLayer.at(layerID).copy(src, dest, area));
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -266,6 +294,7 @@ void glxy::ImageChunk::PasteColorImageTemp(const Image& src, const Vector2u dest
 {
     validate(colorTempLayer->copy(src, dest, area));
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
@@ -303,21 +332,38 @@ void glxy::ImageChunk::CopyImageInternal(const ImageLayerType src, const ImageLa
 void glxy::ImageChunk::InvalidateColorTextures() const
 {
     needUpdateColorLow = true;
+    needUpdateColorMedium = true;
     needUpdateColorNative = true;
 }
 
-void glxy::ImageChunk::MergeColorTempLayer(const LayerID layerID)
+void glxy::ImageChunk::MergeColorTempLayer(const LayerID layerID, const BlendMode blendMode)
 {
-    const unique_ptr<RenderResult> result = RenderWorker::getResult();
-    const auto v = result->get<RenderResult::Chunk>();
-    if (!v) return;
-    validate(colorLayer.at(layerID).copy(v->img, Vector2u()));
-    RenderWorker::RemoveResult();
+    RenderTexture renderTexture;
+
+    validate(renderTexture.resize(chunkSize, {0U, 0U, 0U}));
+
+    renderTexture.clear(Color::Transparent);
+    renderTexture.setView(View(FloatRect({0.f, 0.f}, Vector2f(chunkSize))));
+
+    RenderLayerToTexture(colorLayer.at(layerID), chunkSize, 255, BlendNone, renderTexture);
+    RenderLayerToTexture(*colorTempLayer, chunkSize, 255, blendMode, renderTexture);
+
+    renderTexture.display();
+
+    const Image image = renderTexture.getTexture().copyToImage();
+
+    lock_guard lock(*mtxImageChunks);
+    validate(colorLayer.at(layerID).copy(image, Vector2u()));
 }
 
 void glxy::ImageChunk::setUpdatedColorNative() const
 {
     needUpdateColorNative = false;
+}
+
+void glxy::ImageChunk::setUpdatedColorMedium() const
+{
+    needUpdateColorMedium = false;
 }
 
 void glxy::ImageChunk::setUpdatedColorLow() const

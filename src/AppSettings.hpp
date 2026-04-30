@@ -35,14 +35,46 @@ namespace glxy
         bool colorPickerTriangle = false;
         bool debugMode = false;
         uint8_t panMouseButton = 0;
+        std::array<bool, 3> openWindow = { true, true, true };
         std::set<std::pair<int64_t, std::string>> recentFiles;
+        Vector2i gridBold = Vector2i(16, 16);
 
         bool maintainAspectResize = true;
         bool maintainAspectCanvas = true;
         uint8_t resamplingMethod = 0;
 
+        float brushRadius = 5.f;
+        float eraserRadius = 5.f;
+        float colorSwapRadius = 5.f;
         int8_t bucketTolerance = 50;
         int8_t wandTolerance = 50;
+        int8_t colorSwapTolerance = 50;
+        uint8_t shapeID = 0;
+        float shapeRadius = 5.f;
+        float shapeOutlineThickness = 0;
+
+        uint8_t textStyle = 0;
+        int8_t textAlignment = 0;
+        float letterSpacing = 1;
+        float lineSpacing = 1;
+        float textOutlineThickness = 0;
+        uint16_t textSize = 16;
+        uint16_t fontID = 0;
+
+
+        std::string fontLocation =
+#if defined(SFML_SYSTEM_WINDOWS)
+        "C:/Windows/Fonts";
+#elif defined(SFML_SYSTEM_MACOS)
+        "/System/Library/Fonts";
+#elif defined(SFML_SYSTEM_LINUX)
+        "/usr/share/fonts";
+#elif defined(SFML_SYSTEM_ANDROID)
+        "";
+#elif defined(SFML_SYSTEM_EMSCRIPTEN)
+        "";
+#endif
+
         void Save() const;
         void Load();
     };

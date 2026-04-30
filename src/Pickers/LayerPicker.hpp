@@ -2,7 +2,6 @@
 #include <iosfwd>
 #include <vector>
 #include <SFML/Graphics.hpp>
-#include "imgui.h"
 #include "../Const.hpp"
 #include "../Namespace.hpp"
 #include "../PopUpState.hpp"
@@ -22,8 +21,11 @@ public:
 private:
     struct ImageLayer
     {
+        bool infinite;
         vector<Layer> layers;
         LayerID layerIDSelected = 0;
+
+        ImageLayer(const bool infinite) : infinite(infinite) { }
     };
     vector<ImageLayer> imageLayers;
 public:
@@ -38,12 +40,12 @@ public:
         MoveLayerDown,
         MergeLayerDown
     };
+    bool windowOpen = true;
 
     LayerID getLayerIDSelected(EditorID arrayID) const;
     const Layer& getLayer(EditorID arrayID, LayerID layerID);
 
-
-    void createNewImage();
+    void createNewImage(bool infinite);
     void createNewLayer(EditorID editorID);
     void duplicateLayer(EditorID editorID);
     void deleteImage(EditorID editorID);

@@ -15,15 +15,18 @@ namespace glxy
         unique_ptr<Image> selectionTempLayer;
 
         mutable bool needUpdateColorLow = true;
+        mutable bool needUpdateColorMedium = true;
         mutable bool needUpdateColorNative = true;
         mutable bool needUpdateSelection = false;
         mutable bool needUpdateSelectionTemp = false;
 
         const Vector2u chunkSize;
+        const Vector2i chunkPosition;
+
     public:
         unique_ptr<std::mutex> mtxImageChunks;
 
-        ImageChunk(Vector2u chunkSize);
+        ImageChunk(Vector2u chunkSize, Vector2i chunkPosition);
 
         Color getPixelColor(LayerID layerID, Vector2u coord) const;
         Color getPixelColorTemp(Vector2u coord) const;
@@ -35,6 +38,7 @@ namespace glxy
         bool hasColorTempLayer() const;
 
         bool needsUpdateColorLow() const;
+        bool needsUpdateColorMedium() const;
         bool needsUpdateColorNative() const;
         bool needsUpdateSelection() const;
         bool needsUpdateSelectionTemp() const;
@@ -45,13 +49,14 @@ namespace glxy
         const Image* getImageSelectionTemp() const;
 
         Vector2u getSize() const;
+        Vector2i getChunkPosition() const;
 
         void addLayer(LayerID layerID, Color color = Color::Transparent);
         void duplicateLayer(LayerID layerID);
         void deleteLayer(LayerID layerID);
         void moveLayerUp(LayerID layerID);
         void moveLayerDown(LayerID layerID);
-        void mergeLayerDown(LayerID layerID, uint8_t blendMode, uint8_t transparency);
+        void mergeLayerDown(LayerID lowerLayerID, LayerID upperLayerID, uint8_t blendModeLower, uint8_t blendModeUpper, uint8_t transparency);
 
         void createColorTempLayer();
         void clearColorTempLayer(Color color) const;
@@ -83,9 +88,10 @@ namespace glxy
         void CopyImageInternal(ImageLayerType src, ImageLayerType dst, const IntRect& area, LayerID layerSrc = 0, LayerID layerDst = 0);
 
         void InvalidateColorTextures() const;
-        void MergeColorTempLayer(LayerID layerID);
+        void MergeColorTempLayer(LayerID layerID, BlendMode blendMode);
 
         void setUpdatedColorNative() const;
+        void setUpdatedColorMedium() const;
         void setUpdatedColorLow() const;
         void setUpdatedSelection() const;
         void setUpdatedSelectionTemp() const;

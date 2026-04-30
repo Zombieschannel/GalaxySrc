@@ -9,6 +9,9 @@
 #include <SFML/OpenGL.hpp>
 #include <set>
 
+#include "Rendering/RenderShapes.hpp"
+#include "UIElements/Cursors.hpp"
+
 
 #ifdef SFML_SYSTEM_ANDROID
 #include <SFML/System/NativeActivity.hpp>
@@ -30,6 +33,108 @@ glxy::App::~App()
         filesystem::remove("pdo.pdo");
 }
 
+bool glxy::App::MenuItem(const char* label, const Vector2u iconID, const char* shortcut, const bool selected, const bool enabled) const
+{
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->ChannelsSplit(2);
+
+    drawList->ChannelsSetCurrent(1);
+
+    const Vector2f originalPos = ImGui::GetCursorScreenPos();
+    const Vector2f itemSize = Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetTextLineHeight());
+
+    constexpr int8_t textureColumns = 8;
+    const Vector2f topLeft = Vector2f(1.f / textureColumns * iconID.x, 1.f / textureColumns * iconID.y);
+    const Vector2f bottomRight = Vector2f(topLeft.x + 1.f / textureColumns, topLeft.y + 1.f / textureColumns);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, Vector2f(0, 0));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Color::Transparent);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, Color::Transparent);
+    ImGui::PushStyleColor(ImGuiCol_Button, Color::Transparent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Color::Transparent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color::Transparent);
+
+    bool clicked = false;
+    bool hovered = false;
+
+    if (ImGui::ImageButton((string(label) + "_ImageButton").c_str(), menuIcons.getNativeHandle(),
+        Vector2f(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()), topLeft, bottomRight))
+        clicked = true;
+
+    if (ImGui::IsItemHovered())
+        hovered = true;
+
+    ImGui::PopStyleVar();
+    ImGui::SameLine(0, 1);
+
+    if (ImGui::MenuItem((string(" ") + label).c_str(), shortcut, selected, enabled))
+        clicked = true;
+
+    if (ImGui::IsItemHovered())
+        hovered = true;
+
+    ImGui::PopStyleColor(5);
+
+    if (hovered)
+    {
+        drawList->ChannelsSetCurrent(0);
+
+        ImGui::GetWindowDrawList()->AddRectFilled(originalPos, originalPos + itemSize,
+            ImGui::GetColorU32(ImGuiCol_HeaderHovered));
+    }
+
+    drawList->ChannelsMerge();
+
+    return clicked;
+}
+
+bool glxy::App::BeginMenu(const char* label, const Vector2u iconID, const bool enabled) const
+{
+    const Vector2f originalPos = ImGui::GetCursorScreenPos();
+    const Vector2f itemSize = Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetTextLineHeight());
+
+    constexpr int8_t textureColumns = 8;
+    const Vector2f topLeft = Vector2f(1.f / textureColumns * iconID.x, 1.f / textureColumns * iconID.y);
+    const Vector2f bottomRight = Vector2f(topLeft.x + 1.f / textureColumns, topLeft.y + 1.f / textureColumns);
+
+    bool clicked = false;
+    bool hovered = false;
+    static const char* hoveredLastFrame = nullptr;
+
+    if (hoveredLastFrame && hoveredLastFrame == label)
+    {
+        ImGui::GetWindowDrawList()->AddRectFilled(originalPos, originalPos + itemSize,
+            ImGui::GetColorU32(ImGuiCol_HeaderHovered));
+    }
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, Vector2f(0, 0));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Color::Transparent);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, Color::Transparent);
+    ImGui::PushStyleColor(ImGuiCol_Button, Color::Transparent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Color::Transparent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color::Transparent);
+
+    ImGui::Image(menuIcons.getNativeHandle(), Vector2f(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()), topLeft, bottomRight);
+
+    ImGui::PopStyleVar();
+    ImGui::SameLine(0, 1);
+
+    if (ImGui::BeginMenu((string(" ") + label).c_str(), enabled))
+        clicked = true;
+
+    if (ImGui::IsItemHovered())
+        hovered = true;
+
+    ImGui::PopStyleColor(5);
+
+    if (hovered)
+        hoveredLastFrame = label;
+    if (hoveredLastFrame == label && !hovered)
+        hoveredLastFrame = nullptr;
+
+    return clicked;
+}
+
 void glxy::App::Start(const filesystem::path& filename, const bool openWithGalaxy, const Clock& startUpTimer)
 {
     openWithGalaxyFile = filename;
@@ -39,12 +144,18 @@ void glxy::App::Start(const filesystem::path& filename, const bool openWithGalax
     settings.Load();
     adjSettings.Load();
     effSettings.Load();
+
+    _toolPicker.windowOpen = settings.openWindow.at(0);
+    _colorPicker.windowOpen = settings.openWindow.at(1);
+    _layerPicker.windowOpen = settings.openWindow.at(2);
+
     {
-        auto data = InternalResource::getResource(ID_RES3, "BINARY");
-        Image temp, temp2;
+        const string data = InternalResource::getResource(ID_RES3, "BINARY");
+        Image temp;
         if (!temp.loadFromMemory(data.data(), data.size())) return;
         validate(windowLogoTexture.loadFromImage(temp));
         windowLogoTexture.setSmooth(true);
+
 #ifdef SFML_SYSTEM_WINDOWS
         windowLogo.resize(Vector2u(400, 400), Color::Transparent);
 #else
@@ -52,8 +163,16 @@ void glxy::App::Start(const filesystem::path& filename, const bool openWithGalax
 #endif
         validate(windowLogo.copy(temp, Vector2u((windowLogo.getSize().x - temp.getSize().x) / 2,
             (windowLogo.getSize().y - temp.getSize().y) / 2)));
+    }
 
-        data = InternalResource::getResource(ID_RES4, "BINARY");
+    RecreateAppWindow();
+
+    window.clear();
+    window.display();
+
+    {
+        Image temp, temp2;
+        string data = InternalResource::getResource(ID_RES4, "BINARY");
         if (!toolIcons.loadFromMemory(data.data(), data.size())) return;
         toolIcons.setSmooth(true);
 
@@ -78,24 +197,30 @@ void glxy::App::Start(const filesystem::path& filename, const bool openWithGalax
         validate(layerIcons.loadFromImage(temp2));
         layerIcons.setSmooth(true);
 
+        data = InternalResource::getResource(ID_RES9, "BINARY");
+        if (!textIcons.loadFromMemory(data.data(), data.size())) return;
+        textIcons.setSmooth(true);
+
+        data = InternalResource::getResource(ID_RES10, "BINARY");
+        if (!finalizeIcons.loadFromMemory(data.data(), data.size())) return;
+        finalizeIcons.setSmooth(true);
+
+        data = InternalResource::getResource(ID_RES11, "BINARY");
+        MemoryInputStream mis(data.c_str(), data.length());
+        Cursors::Setup(mis);
+
+        data = InternalResource::getResource(ID_RES12, "BINARY");
+        if (!menuIcons.loadFromMemory(data.data(), data.size())) return;
+        menuIcons.setSmooth(true);
     }
-
-    RecreateAppWindow();
-
-    window.clear();
-    window.display();
 
     validate(ImGui::SFML::Init(window, false));
     mainFontData = InternalResource::getResource(ID_RES1, "BINARY");
     if (!mainFont.openFromMemory(mainFontData.data(), mainFontData.size()))
         return;
 
-#ifdef SFML_DESKTOP
-    cursor = make_unique<Cursor>(Cursor::Type::Arrow);
-    window.setMouseCursor(*cursor);
-#endif
-
-    cursorType = Cursor::Type::Arrow;
+    LoadFonts();
+    LoadShapes();
 
     //keep font memory
     ImFontConfig fc;
@@ -130,22 +255,73 @@ void glxy::App::Start(const filesystem::path& filename, const bool openWithGalax
     this->startUpTimer = &startUpTimer;
     CanvasWorker::Setup();
     app();
-    RenderWorker::ExitThread();
     CanvasWorker::ExitThread();
+
+    settings.openWindow.at(0) = _toolPicker.windowOpen;
+    settings.openWindow.at(1) = _colorPicker.windowOpen;
+    settings.openWindow.at(2) = _layerPicker.windowOpen;
+
     settings.Save();
     adjSettings.Save();
     effSettings.Save();
     ImGui::SFML::Shutdown();
 }
 
+void glxy::App::LoadFonts()
+{
+    fontPaths.clear();
+    fontPaths.push_back("(Built-in) Montserrat.ttf");
+    if (filesystem::exists(settings.fontLocation))
+    {
+        for (const auto& n : filesystem::directory_iterator(settings.fontLocation))
+        {
+            if (n.is_directory())
+            {
+                for (const auto& m : filesystem::directory_iterator(n))
+                    if (!m.is_directory() && find(c_fontExtensions.begin(), c_fontExtensions.end(), m.path().extension().string()) != c_fontExtensions.end())
+                        fontPaths.push_back(m);
+            }
+            else if (find(c_fontExtensions.begin(), c_fontExtensions.end(), n.path().extension().string()) != c_fontExtensions.end())
+                fontPaths.push_back(n);
+        }
+        std::sort(fontPaths.begin(), fontPaths.end(), [](const filesystem::path& a, const filesystem::path& b)
+        {
+            return a.filename().string() < b.filename().string();
+        });
+    }
+    settings.fontID = std::clamp(static_cast<int32_t>(settings.fontID), 0, static_cast<int32_t>(fontPaths.size() - 1));
+    if (settings.fontID == 0)
+        textFont = std::make_shared<Font>(mainFont);
+    else
+        textFont = std::make_shared<Font>(fontPaths.at(settings.fontID));
+    textFont->setSmooth(true);
+}
+
+void glxy::App::LoadShapes()
+{
+    const int8_t shapeSize = 32;
+    RenderTexture texture;
+    validate(shapeTextures.resize(Vector2u(static_cast<int16_t>(ShapeType::Count) * shapeSize, shapeSize)));
+    shapeTextures.setSmooth(true);
+    validate(texture.resize(Vector2u(shapeSize, shapeSize), {0U, 0U, 0U}));
+    texture.setView(View(FloatRect(Vector2f(0, 0), Vector2f(shapeSize, shapeSize))));
+    for (int8_t i = 0; i < static_cast<int8_t>(ShapeType::Count); i++)
+    {
+        texture.clear(Color::Transparent);
+        ConvexShape shape;
+        RenderShapes::getShape(shape, static_cast<ShapeType>(i), Vector2i(shapeSize, shapeSize), 4);
+        texture.draw(shape);
+        texture.display();
+        shapeTextures.update(texture.getTexture(), Vector2u(i * shapeSize, 0));
+    }
+}
+
 void glxy::App::RecreateAppWindow()
 {
-#ifdef SFML_SYSTEM_MACOS
-    const int8_t GLTarget = 21;
-#elif defined(SFML_SYSTEM_ANDROID)
-    const int8_t GLTarget = 31;
-#else
-    const int8_t GLTarget = 42;
+#if defined(SFML_SYSTEM_WINDOWS) || defined(SFML_SYSTEM_MACOS) || defined(SFML_SYSTEM_LINUX) || defined(SFML_SYSTEM_ANDROID)
+    const int8_t GLTarget = 11;
+#elif defined(SFML_SYSTEM_EMSCRIPTEN)
+    const int8_t GLTarget = 20;
 #endif
 
 #ifdef SFML_DESKTOP
@@ -174,17 +350,17 @@ void glxy::App::RecreateAppWindow()
     }
 }
 
-void glxy::App::CreateEmptyImage(const Vector2u resolution, const Color color)
+void glxy::App::CreateEmptyImage(const Vector2u resolution, const bool infiniteSize, const Color color)
 {
     CanvasWorker::waitWork();
-    CanvasWorker::AddEditor();
-    _imageEditor.emplace_back(std::make_shared<ImageEditor>(settings, window, popUpState, cursor, cursorType, _colorPicker,
+    CanvasWorker::AddEditor(infiniteSize);
+    _imageEditor.emplace_back(std::make_shared<ImageEditor>(settings, window, popUpState, _colorPicker,
         !_imageEditor.empty() ? _imageEditor.back()->dockID : mainDockID, _toolPicker, _layerPicker, gizmoIcons, mainFont,
         CanvasWorker::getChunkManager(static_cast<EditorID>(_imageEditor.size())),
         CanvasWorker::getCommon(static_cast<EditorID>(_imageEditor.size())),
-        static_cast<int16_t>(_imageEditor.size())));
+        static_cast<int16_t>(_imageEditor.size()), infiniteSize, textFont));
     setActiveEditor(_imageEditor.size() - 1);
-    _layerPicker.createNewImage();
+    _layerPicker.createNewImage(infiniteSize);
     AddWork(CanvasWork::ImageEmpty{resolution, color});
     _imageEditor.back()->imagePath.clear();
 }
@@ -192,24 +368,9 @@ void glxy::App::CreateEmptyImage(const Vector2u resolution, const Color color)
 bool glxy::App::hasUnsavedImages() const
 {
     for (auto& n : _imageEditor)
-    {
         if (n->unsavedChanges)
             return true;
-    }
     return false;
-}
-
-void glxy::App::ExitApp(const bool windowClose)
-{
-    if (find(popUpState.begin(), popUpState.end(), PopUpState::Setup) != popUpState.end())
-        window.close();
-    if (popUpState.empty() || windowClose)
-    {
-        if (hasUnsavedImages())
-            popUpState.push_back(PopUpState::SaveBeforeExit);
-        else
-            window.close();
-    }
 }
 
 void glxy::App::DeleteEditor(const EditorID ID)
@@ -249,20 +410,6 @@ void glxy::App::AddRecentFile(const filesystem::path& file)
     settings.recentFiles.emplace(time(nullptr), file.string());
 }
 
-void glxy::App::setCursorType(Cursor::Type cursorType)
-{
-#ifndef SFML_DESKTOP
-    return;
-#endif
-    this->cursorType = cursorType;
-    auto t = Cursor::createFromSystem(this->cursorType);
-    if (t)
-    {
-        *cursor = std::move(*t);
-        window.setMouseCursor(*cursor);
-    }
-}
-
 void glxy::App::RescaleWindow(const Vector2u size)
 {
     settings.resolution = size;
@@ -283,148 +430,109 @@ void glxy::App::TitleBar()
     }
     if (ImGui::BeginMenu("File"_C))
     {
-        const array<string, c_fileMenuCnt> shortcuts = {
-            Shortcuts::getName(ActionShortcut::NewImage),
-            Shortcuts::getName(ActionShortcut::OpenImage),
-            Shortcuts::getName(ActionShortcut::SaveImage),
-            Shortcuts::getName(ActionShortcut::SaveImageAs),
-            ""
-        };
-        for (int8_t i = 0; i < c_fileMenuCnt; i++)
-        {
-            ImGui::BeginDisabled(activeImageEditor == -1 && (i == 2 || i == 3));
-            if (ImGui::MenuItem(LL::ind("fileMenu[]", i).c_str(), shortcuts.at(i).c_str()))
-            {
-                switch (i)
-                {
-                case 0:
-                    popUpState.push_back(PopUpState::New);
-                    break;
-                case 1:
-                    popUpState.push_back(PopUpState::Open);
-                    break;
-                case 2:
-                    SaveImage();
-                    break;
-                case 3:
-                    if (activeImageEditor >= 0 && activeImageEditor < _imageEditor.size())
-                        popUpState.push_back(PopUpState::Save);
-                    break;
-                case 4:
-                    ExitApp(false);
-                    break;
-                default: break;
-                }
-            }
-            ImGui::EndDisabled();
-        }
+        if (MenuItem("fileMenu[0]"_C, Vector2u(0, 0), Shortcuts::getName(ActionShortcut::NewImage).c_str()))
+            MenuNew();
+        if (MenuItem("fileMenu[1]"_C, Vector2u(1, 0), Shortcuts::getName(ActionShortcut::OpenImage).c_str()))
+            MenuOpen();
+        ImGui::BeginDisabled(activeImageEditor == -1 || _imageEditor.at(activeImageEditor)->isInfinite);
+        if (MenuItem("fileMenu[2]"_C, Vector2u(2, 0), Shortcuts::getName(ActionShortcut::SaveImage).c_str()))
+            MenuSave();
+        if (MenuItem("fileMenu[3]"_C, Vector2u(3, 0), Shortcuts::getName(ActionShortcut::SaveImageAs).c_str()))
+            MenuSaveAs();
+        ImGui::EndDisabled();
+        if (MenuItem("fileMenu[4]"_C, Vector2u(4, 0)))
+            MenuExit(false);
         ImGui::EndMenu();
     }
-    if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::NewImage])
-        popUpState.push_back(PopUpState::New);
-    if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::OpenImage])
-        popUpState.push_back(PopUpState::Open);
-    if (activeImageEditor >= 0)
+    if (popUpState.empty())
     {
-        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::SaveImage])
-            SaveImage();
-        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::SaveImageAs])
-            if (activeImageEditor < _imageEditor.size())
-                popUpState.push_back(PopUpState::Save);
+        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::NewImage])
+            MenuNew();
+        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::OpenImage])
+            MenuOpen();
+        if (activeImageEditor >= 0 && !_imageEditor.at(activeImageEditor)->isInfinite)
+        {
+            if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::SaveImage])
+                MenuSave();
+            if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::SaveImageAs])
+                MenuSaveAs();
+        }
     }
-    ImGui::BeginDisabled(activeImageEditor == -1);
+    ImGui::BeginDisabled(activeImageEditor == -1 || _imageEditor.at(activeImageEditor)->isInfinite);
     if (ImGui::BeginMenu("Edit"_C))
     {
         ImageEditor* active = activeImageEditor == -1 ? nullptr : _imageEditor.at(activeImageEditor).get();
-        ImGui::BeginDisabled(!active || !active->chunkManager.hasSelectionLayer(0));
-        if (ImGui::MenuItem("editMenu[0]"_C, Shortcuts::getName(ActionShortcut::Copy).c_str()))
-        {
-            clipboardImage = make_unique<Image>();
-            AddWorkAndWait(CanvasWork::ClipboardCopy{clipboardImage.get(), &clipboardLocation, _layerPicker.getLayerIDSelected(activeImageEditor)});
-        }
-        if (ImGui::MenuItem("editMenu[1]"_C, Shortcuts::getName(ActionShortcut::Cut).c_str()))
-        {
-            clipboardImage = make_unique<Image>();
-            AddWork(CanvasWork::ClipboardCopy{clipboardImage.get(), &clipboardLocation, _layerPicker.getLayerIDSelected(activeImageEditor)});
-            AddWorkAndWait(CanvasWork::DeleteSelected{_layerPicker.getLayerIDSelected(activeImageEditor)});
-        }
+        ImGui::BeginDisabled(!active || !active->chunkManager.anyHasSelectionLayer());
+        if (MenuItem("editMenu[0]"_C, Vector2u(5, 0), Shortcuts::getName(ActionShortcut::Copy).c_str()))
+            MenuCopy();
+        if (MenuItem("editMenu[1]"_C, Vector2u(6, 0), Shortcuts::getName(ActionShortcut::Cut).c_str()))
+            MenuCut();
         ImGui::EndDisabled();
         ImGui::BeginDisabled(!clipboardImage);
-        if (ImGui::MenuItem("editMenu[2]"_C, Shortcuts::getName(ActionShortcut::Paste).c_str()))
+        if (MenuItem("editMenu[2]"_C, Vector2u(7, 0), Shortcuts::getName(ActionShortcut::Paste).c_str()))
+            MenuPaste();
+        ImGui::EndDisabled();
+        if (BeginMenu("editMenu[3]"_C, Vector2u(0, 1)))
         {
-            _imageEditor.at(activeImageEditor)->currentTool = Tool::MoveSelection;
-            _imageEditor.at(activeImageEditor)->ClipboardPaste(clipboardImage.get(), &clipboardLocation);
-            AddWorkAndWait(CanvasWork::ClipboardPaste{clipboardImage.get(), &clipboardLocation,
-                _layerPicker.getLayerIDSelected(activeImageEditor), _imageEditor.at(activeImageEditor)->moveSelectionTransform.getTransform()});
+            if (MenuItem("selectSubmenu[0]"_C, Vector2u(1, 1), Shortcuts::getName(ActionShortcut::SelectAll).c_str()))
+                MenuSelectAll();
+            if (MenuItem("selectSubmenu[1]"_C, Vector2u(2, 1)))
+                MenuSelectLeft();
+            if (MenuItem("selectSubmenu[2]"_C, Vector2u(3, 1)))
+                MenuSelectRight();
+            if (MenuItem("selectSubmenu[3]"_C, Vector2u(4, 1)))
+                MenuSelectTop();
+            if (MenuItem("selectSubmenu[4]"_C, Vector2u(5, 1)))
+                MenuSelectBottom();
+            if (MenuItem("selectSubmenu[5]"_C, Vector2u(6, 1)))
+                MenuSelectTopLeft();
+            if (MenuItem("selectSubmenu[6]"_C, Vector2u(7, 1)))
+                MenuSelectTopRight();
+            if (MenuItem("selectSubmenu[7]"_C, Vector2u(0, 2)))
+                MenuSelectBottomLeft();
+            if (MenuItem("selectSubmenu[8]"_C, Vector2u(1, 2)))
+                MenuSelectBottomRight();
+            ImGui::EndMenu();
         }
+        ImGui::BeginDisabled(!active || !active->chunkManager.anyHasSelectionLayer());
+        if (MenuItem("editMenu[4]"_C, Vector2u(2, 2), Shortcuts::getName(ActionShortcut::DeselectAll).c_str()))
+            MenuDeselectAll();
         ImGui::EndDisabled();
 
-        if (ImGui::MenuItem("editMenu[3]"_C, Shortcuts::getName(ActionShortcut::SelectAll).c_str()))
-        {
-            active->currentTool = Tool::BoxSelect;
-            AddWorkAndWait(CanvasWork::SelectAll{});
-        }
-
-        ImGui::BeginDisabled(!active || !active->chunkManager.hasSelectionLayer(0));
-        if (ImGui::MenuItem("editMenu[4]"_C, Shortcuts::getName(ActionShortcut::DeselectAll).c_str()))
-            AddWorkAndWait(CanvasWork::DeselectAll{});
-        ImGui::EndDisabled();
-
-        ImGui::BeginDisabled(!active || !active->chunkManager.hasSelectionLayer(0));
-        if (ImGui::MenuItem("editMenu[5]"_C, Shortcuts::getName(ActionShortcut::Delete).c_str()))
-            AddWorkAndWait(CanvasWork::DeleteSelected{_layerPicker.getLayerIDSelected(activeImageEditor)});
+        ImGui::BeginDisabled(!active || !active->chunkManager.anyHasSelectionLayer() && !active->chunkManager.anyHasSelectionTempLayer());
+        if (MenuItem("editMenu[5]"_C, Vector2u(3, 2), Shortcuts::getName(ActionShortcut::Delete).c_str()))
+            MenuDelete();
         ImGui::EndDisabled();
         ImGui::EndMenu();
     }
     ImGui::EndDisabled();
-    if (activeImageEditor >= 0)
+    if (activeImageEditor >= 0 && !_imageEditor.at(activeImageEditor)->isInfinite)
     {
-        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Copy] && _imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer(0))
-        {
-            clipboardImage = make_unique<Image>();
-            AddWorkAndWait(CanvasWork::ClipboardCopy{clipboardImage.get(), &clipboardLocation, _layerPicker.getLayerIDSelected(activeImageEditor)});
-        }
-        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Cut] && _imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer(0))
-        {
-            clipboardImage = make_unique<Image>();
-            _imageEditor.at(activeImageEditor)->unsavedChanges = true;
-            AddWork(CanvasWork::ClipboardCopy{clipboardImage.get(), &clipboardLocation, _layerPicker.getLayerIDSelected(activeImageEditor)});
-            AddWorkAndWait(CanvasWork::DeleteSelected{_layerPicker.getLayerIDSelected(activeImageEditor)});
-        }
+        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Copy] && _imageEditor.at(activeImageEditor)->chunkManager.anyHasSelectionLayer())
+            MenuCopy();
+        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Cut] && _imageEditor.at(activeImageEditor)->chunkManager.anyHasSelectionLayer())
+            MenuCut();
         if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Paste] && clipboardImage)
-        {
-            _imageEditor.at(activeImageEditor)->currentTool = Tool::MoveSelection;
-            _imageEditor.at(activeImageEditor)->unsavedChanges = true;
-            _imageEditor.at(activeImageEditor)->ClipboardPaste(clipboardImage.get(), &clipboardLocation);
-            AddWorkAndWait(CanvasWork::ClipboardPaste{clipboardImage.get(), &clipboardLocation,
-                _layerPicker.getLayerIDSelected(activeImageEditor), _imageEditor.at(activeImageEditor)->moveSelectionTransform.getTransform()});
-        }
+            MenuPaste();
         if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::SelectAll])
-        {
-            _imageEditor.at(activeImageEditor)->currentTool = Tool::BoxSelect;
-            AddWorkAndWait(CanvasWork::SelectAll{});
-        }
-        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::DeselectAll] && _imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer(0))
-            AddWorkAndWait(CanvasWork::DeselectAll{});
-        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Delete] && _imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer(0))
-        {
-            _imageEditor.at(activeImageEditor)->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::DeleteSelected{_layerPicker.getLayerIDSelected(activeImageEditor)});
-        }
+            MenuSelectAll();
+        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::DeselectAll] && _imageEditor.at(activeImageEditor)->chunkManager.anyHasSelectionLayer())
+            MenuDeselectAll();
+        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Delete] && (_imageEditor.at(activeImageEditor)->chunkManager.anyHasSelectionLayer() ||
+            _imageEditor.at(activeImageEditor)->chunkManager.anyHasSelectionTempLayer()))
+            MenuDelete();
     }
     if (ImGui::MenuItem("Settings"_C) || Shortcuts()[ActionShortcut::OpenSettings])
-    {
         popUpState.push_back(PopUpState::Settings);
-    }
     ImGui::BeginDisabled(activeImageEditor == -1);
     if (ImGui::BeginMenu("View"_C))
     {
         ImageEditor* active = activeImageEditor == -1 ? nullptr : _imageEditor.at(activeImageEditor).get();
-        if (ImGui::MenuItem("viewMenu[0]"_C, Shortcuts::getName(ActionShortcut::ZoomIn).c_str()))
-            active->OptionZoomIn(false);
-        if (ImGui::MenuItem("viewMenu[1]"_C, Shortcuts::getName(ActionShortcut::ZoomOut).c_str()))
-            active->OptionZoomOut(false);
-        if (ImGui::BeginMenu("viewMenu[2]"_C))
+        if (MenuItem("viewMenu[0]"_C, Vector2u(4, 2), Shortcuts::getName(ActionShortcut::ZoomIn).c_str()))
+            MenuZoomIn();
+        if (MenuItem("viewMenu[1]"_C, Vector2u(5, 2), Shortcuts::getName(ActionShortcut::ZoomOut).c_str()))
+            MenuZoomOut();
+        if (BeginMenu("viewMenu[2]"_C, Vector2u(6, 2)))
         {
             const array zoomScales = {
                 1, 2, 5, 10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 1000, 2000, 5000
@@ -448,234 +556,152 @@ void glxy::App::TitleBar()
             }
             ImGui::EndMenu();
         }
+        if (BeginMenu("viewMenu[3]"_C, Vector2u(7, 2)))
+        {
+            if (ImGui::MenuItem("windowName[0]"_C))
+                _toolPicker.windowOpen = true;
+            if (ImGui::MenuItem("windowName[1]"_C))
+                _colorPicker.windowOpen = true;
+            if (ImGui::MenuItem("windowName[2]"_C))
+                _layerPicker.windowOpen = true;
+            ImGui::EndMenu();
+        }
         ImGui::Separator();
-        if (ImGui::MenuItem("viewMenu[3]"_C, nullptr, settings.showGrid))
-        {
-            settings.showGrid = !settings.showGrid;
-            for (auto& n : _imageEditor)
-                n->OptionGrid(settings.showGrid);
-        }
-        if (ImGui::MenuItem("viewMenu[4]"_C, nullptr, settings.showRuler))
-        {
-            settings.showRuler = !settings.showRuler;
-            for (auto& n : _imageEditor)
-                n->OptionRuler(settings.showRuler);
-        }
-        if (ImGui::MenuItem("viewMenu[5]"_C))
-            active->OptionActualSize();
-        if (ImGui::MenuItem("viewMenu[6]"_C, nullptr, settings.syncViewport))
-            settings.syncViewport = !settings.syncViewport;
+        if (MenuItem("viewMenu[4]"_C, Vector2u(0, 3), nullptr, settings.showGrid))
+            MenuGrid();
+        if (MenuItem("viewMenu[5]"_C, Vector2u(1, 3), (to_string(settings.gridBold.x) + " x " + to_string(settings.gridBold.y)).c_str()))
+            MenuGridBold();
+        if (MenuItem("viewMenu[6]"_C, Vector2u(2, 3), nullptr, settings.showRuler))
+            MenuRuler();
+        if (MenuItem("viewMenu[7]"_C, Vector2u(3, 3)))
+            MenuActualSize();
+        if (MenuItem("viewMenu[8]"_C, Vector2u(4, 3), nullptr, settings.syncViewport))
+            MenuSyncViewport();
         ImGui::EndMenu();
     }
+    ImGui::BeginDisabled(activeImageEditor == -1 || _imageEditor.at(activeImageEditor)->isInfinite);
     if (ImGui::BeginMenu("Image"_C))
     {
         ImageEditor* active = activeImageEditor == -1 ? nullptr : _imageEditor.at(activeImageEditor).get();
-        ImGui::BeginDisabled(!active || !active->chunkManager.hasSelectionLayer(0));
-        if (ImGui::MenuItem("imageMenu[0]"_C))
-        {
-            AddWorkAndWait(CanvasWork::CropSelection{});
-            active->ClampView();
-            active->unsavedChanges = true;
-            active->gridLines.manualChange = true;
-            active->rulerUI.manualChange = true;
-        }
+        ImGui::BeginDisabled(!active || !active->chunkManager.anyHasSelectionLayer());
+        if (MenuItem("imageMenu[0]"_C, Vector2u(5, 3), Shortcuts::getName(ActionShortcut::Crop).c_str()))
+            MenuCrop();
         ImGui::EndDisabled();
         ImGui::Separator();
-        if (ImGui::MenuItem("imageMenu[1]"_C, Shortcuts::getName(ActionShortcut::Resize).c_str()))
-            popUpState.push_back(PopUpState::Resize);
-        if (ImGui::MenuItem("imageMenu[2]"_C, Shortcuts::getName(ActionShortcut::ResizeCanvas).c_str()))
-            popUpState.push_back(PopUpState::ResizeCanvas);
+        if (MenuItem("imageMenu[1]"_C, Vector2u(6, 3), Shortcuts::getName(ActionShortcut::Resize).c_str()))
+            MenuResize();
+        if (MenuItem("imageMenu[2]"_C, Vector2u(7, 3), Shortcuts::getName(ActionShortcut::ResizeCanvas).c_str()))
+            MenuResizeCanvas();
         ImGui::Separator();
-        if (ImGui::MenuItem("imageMenu[3]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::FlipImageHorizontal{});
-        }
-        if (ImGui::MenuItem("imageMenu[4]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::FlipImageVertical{});
-        }
+        if (MenuItem("imageMenu[3]"_C, Vector2u(0, 4)))
+            MenuFlipImageHorizontal();
+        if (MenuItem("imageMenu[4]"_C, Vector2u(1, 4)))
+            MenuFlipImageVertical();
         ImGui::Separator();
-        if (ImGui::MenuItem("imageMenu[5]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::Rotate90CW{});
-        }
-        if (ImGui::MenuItem("imageMenu[6]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::Rotate90CCW{});
-        }
-        if (ImGui::MenuItem("imageMenu[7]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::Rotate180{});
-        }
+        if (MenuItem("imageMenu[5]"_C, Vector2u(2, 4)))
+            MenuRotate90CW();
+        if (MenuItem("imageMenu[6]"_C, Vector2u(3, 4)))
+            MenuRotate90CCW();
+        if (MenuItem("imageMenu[7]"_C, Vector2u(4, 4)))
+            MenuRotate180();
         ImGui::Separator();
-        if (ImGui::MenuItem("imageMenu[8]"_C, Shortcuts::getName(ActionShortcut::TransformImage).c_str()))
-        {
-            _imageEditor.at(activeImageEditor)->currentTool = Tool::BoxSelect;
-            popUpState.push_back(PopUpState::TransformImage);
-            AddWork(CanvasWork::TransformImageSetup{_layerPicker.getLayerIDSelected(activeImageEditor)});
-        }
+        if (MenuItem("imageMenu[8]"_C, Vector2u(5, 4), Shortcuts::getName(ActionShortcut::TransformImage).c_str()))
+            MenuTransformImage();
         ImGui::EndMenu();
     }
-    if (activeImageEditor >= 0)
+    ImGui::EndDisabled();
+    if (activeImageEditor >= 0 && !_imageEditor.at(activeImageEditor)->isInfinite)
     {
+        if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Crop] && _imageEditor.at(activeImageEditor)->chunkManager.anyHasSelectionLayer())
+            MenuCrop();
         if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Resize])
-            popUpState.push_back(PopUpState::Resize);
+            MenuResize();
         if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::ResizeCanvas])
-            popUpState.push_back(PopUpState::ResizeCanvas);
+            MenuResizeCanvas();
         if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::TransformImage])
-        {
-            _imageEditor.at(activeImageEditor)->currentTool = Tool::BoxSelect;
-            popUpState.push_back(PopUpState::TransformImage);
-            AddWork(CanvasWork::TransformImageSetup{_layerPicker.getLayerIDSelected(activeImageEditor)});
-        }
+            MenuTransformImage();
     }
     if (ImGui::BeginMenu("Layers"_C))
     {
         ImageEditor* active = activeImageEditor == -1 ? nullptr : _imageEditor.at(activeImageEditor).get();
-        if (ImGui::MenuItem("layerMenu[0]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::CreateLayer{_layerPicker.getLayerIDSelected(activeImageEditor)});
-            _layerPicker.createNewLayer(activeImageEditor);
-        }
+        if (MenuItem("layerMenu[0]"_C, Vector2u(6, 4)))
+            MenuNewLayer();
         ImGui::BeginDisabled(!active || active->chunkManager.getLayerCount() == 1);
-        if (ImGui::MenuItem("layerMenu[1]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::DeleteLayer{_layerPicker.getLayerIDSelected(activeImageEditor)});
-            _layerPicker.deleteLayer(activeImageEditor);
-        }
+        if (MenuItem("layerMenu[1]"_C, Vector2u(7, 4)))
+            MenuDeleteLayer();
         ImGui::EndDisabled();
-        if (ImGui::MenuItem("layerMenu[2]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::DuplicateLayer{_layerPicker.getLayerIDSelected(activeImageEditor)});
-            _layerPicker.duplicateLayer(activeImageEditor);
-        }
+        if (MenuItem("layerMenu[2]"_C, Vector2u(0, 5)))
+            MenuDuplicateLayer();
         ImGui::Separator();
         ImGui::BeginDisabled(!active || _layerPicker.getLayerIDSelected(activeImageEditor) >= active->chunkManager.getLayerCount() - 1);
-        if (ImGui::MenuItem("layerMenu[3]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::MoveLayerUp{_layerPicker.getLayerIDSelected(activeImageEditor)});
-            _layerPicker.moveLayerUp(activeImageEditor);
-        }
+        if (MenuItem("layerMenu[3]"_C, Vector2u(1, 5)))
+            MenuMoveLayerUp();
         ImGui::EndDisabled();
-
         ImGui::BeginDisabled(!active || _layerPicker.getLayerIDSelected(activeImageEditor) <= 0);
-        if (ImGui::MenuItem("layerMenu[4]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::MoveLayerDown{_layerPicker.getLayerIDSelected(activeImageEditor)});
-            _layerPicker.moveLayerDown(activeImageEditor);
-        }
-        if (ImGui::MenuItem("layerMenu[5]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::MergeLayerDown{_layerPicker.getLayerIDSelected(activeImageEditor)});
-            _layerPicker.deleteLayer(activeImageEditor);
-        }
+        if (MenuItem("layerMenu[4]"_C, Vector2u(2, 5)))
+            MenuMoveLayerDown();
+        if (MenuItem("layerMenu[5]"_C, Vector2u(3, 5)))
+            MenuMergeLayerDown();
         ImGui::EndDisabled();
         ImGui::Separator();
-        if (ImGui::MenuItem("layerMenu[6]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::FlipLayerHorizontal{_layerPicker.getLayerIDSelected(activeImageEditor)});
-        }
-        if (ImGui::MenuItem("layerMenu[7]"_C))
-        {
-            active->unsavedChanges = true;
-            AddWorkAndWait(CanvasWork::FlipLayerVertical{_layerPicker.getLayerIDSelected(activeImageEditor)});
-        }
+        if (MenuItem("layerMenu[6]"_C, Vector2u(4, 5)))
+            MenuFlipImageHorizontal();
+        if (MenuItem("layerMenu[7]"_C, Vector2u(5, 5)))
+            MenuFlipImageVertical();
         ImGui::Separator();
-        if (ImGui::MenuItem("layerMenu[8]"_C))
-        {
-            popUpState.push_back(PopUpState::LayerProperties);
-        }
+        if (MenuItem("layerMenu[8]"_C, Vector2u(6, 5)))
+            MenuLayerProperties();
         ImGui::EndMenu();
     }
+    ImGui::BeginDisabled(activeImageEditor == -1 || _imageEditor.at(activeImageEditor)->isInfinite);
     if (ImGui::BeginMenu("Adjustments"_C))
     {
-        if (ImGui::MenuItem("adjustMenu[0]"_C))
-        {
-            popUpState.push_back(PopUpState::Adjustment);
-            targetAdjustment = Adjustments::BlackAndWhite;
-        }
-        if (ImGui::MenuItem("adjustMenu[1]"_C))
-        {
-            popUpState.push_back(PopUpState::Adjustment);
-            targetAdjustment = Adjustments::BrightnessContrast;
-        }
-        if (ImGui::MenuItem("adjustMenu[2]"_C))
-        {
-            popUpState.push_back(PopUpState::Adjustment);
-            targetAdjustment = Adjustments::HSV;
-        }
-        if (ImGui::MenuItem("adjustMenu[3]"_C))
-        {
-            popUpState.push_back(PopUpState::Adjustment);
-            targetAdjustment = Adjustments::Invert;
-        }
-        if (ImGui::MenuItem("adjustMenu[4]"_C))
-        {
-            popUpState.push_back(PopUpState::Adjustment);
-            targetAdjustment = Adjustments::Tint;
-        }
+        if (MenuItem("adjustMenu[0]"_C, Vector2u(7, 5)))
+            MenuAdjustBlackAndWhite();
+        if (MenuItem("adjustMenu[1]"_C, Vector2u(0, 6)))
+            MenuAdjustBrightnessContrast();
+        if (MenuItem("adjustMenu[2]"_C, Vector2u(1, 6)))
+            MenuAdjustHSV();
+        if (MenuItem("adjustMenu[3]"_C, Vector2u(2, 6)))
+            MenuAdjustInvert();
+        if (MenuItem("adjustMenu[4]"_C, Vector2u(3, 6)))
+            MenuAdjustTint();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Effects"_C))
     {
-        if (ImGui::MenuItem("effectMenu[0]"_C))
-        {
-            popUpState.push_back(PopUpState::Effect);
-            targetEffect = Effects::GaussianBlur;
-        }
-        if (ImGui::MenuItem("effectMenu[1]"_C))
-        {
-            popUpState.push_back(PopUpState::Effect);
-            targetEffect = Effects::BoxBlur;
-        }
-        if (ImGui::MenuItem("effectMenu[2]"_C))
-        {
-            popUpState.push_back(PopUpState::Effect);
-            targetEffect = Effects::DirectionalBlur;
-        }
+        if (MenuItem("effectMenu[0]"_C, Vector2u(4, 6)))
+            MenuEffectGauss();
+        if (MenuItem("effectMenu[1]"_C, Vector2u(5, 6)))
+            MenuEffectBox();
+        if (MenuItem("effectMenu[2]"_C, Vector2u(6, 6)))
+            MenuEffectDirectional();
         ImGui::Separator();
-        if (ImGui::MenuItem("effectMenu[3]"_C))
-        {
-            popUpState.push_back(PopUpState::Effect);
-            targetEffect = Effects::WhiteNoise;
-        }
-        if (ImGui::MenuItem("effectMenu[4]"_C))
-        {
-            popUpState.push_back(PopUpState::Effect);
-            targetEffect = Effects::FractalNoise;
-        }
+        if (MenuItem("effectMenu[3]"_C, Vector2u(7, 6)))
+            MenuEffectWhite();
+        if (MenuItem("effectMenu[4]"_C, Vector2u(0, 7)))
+            MenuEffectFractal();
         ImGui::EndMenu();
     }
+    ImGui::EndDisabled();
     ImGui::EndDisabled();
 
     if (ImGui::BeginMenu("Help"_C))
     {
-        if (ImGui::MenuItem("OtherType[0]"_C))
-            popUpState.push_back(PopUpState::Changelog);
-        if (ImGui::MenuItem("OtherType[1]"_C))
-            popUpState.push_back(PopUpState::FuturePlan);
-        if (ImGui::MenuItem("OtherType[2]"_C))
-            popUpState.push_back(PopUpState::GLScan);
-        if (ImGui::MenuItem("OtherType[3]"_C, Shortcuts::getName(ActionShortcut::Debug).c_str(), settings.debugMode))
-            settings.debugMode = !settings.debugMode;
-        if (ImGui::MenuItem("OtherType[4]"_C))
-            popUpState.push_back(PopUpState::About);
+        if (MenuItem("otherMenu[0]"_C, Vector2u(1, 7)))
+            MenuChangelog();
+        if (MenuItem("otherMenu[1]"_C, Vector2u(2, 7)))
+            MenuFuturePlan();
+        if (MenuItem("otherMenu[2]"_C, Vector2u(3, 7)))
+            MenuGLScan();
+        if (MenuItem("otherMenu[3]"_C, Vector2u(4, 7), Shortcuts::getName(ActionShortcut::Debug).c_str(), settings.debugMode))
+            MenuDebug();
+        if (MenuItem("otherMenu[4]"_C, Vector2u(5, 7)))
+            MenuAbout();
         ImGui::EndMenu();
     }
     if (!GLOBAL.wantInput && Shortcuts()[ActionShortcut::Debug])
-        settings.debugMode = !settings.debugMode;
+        MenuDebug();
 
     if (dfp < seconds(1))
         ImGui::Text("%s", (" " + "Saved"_S).c_str());
@@ -703,16 +729,16 @@ void glxy::App::SubTitleBar()
     {
         for (uint8_t i = 0; i < static_cast<uint8_t>(Tool::Count); i++)
         {
+            if (!(_toolPicker.getToolsEnabled() >> i & 1))
+                continue;
             if (ImGui::Selectable(LL::ind("toolName[]", i).c_str()))
-            {
                 _toolPicker.setTool(static_cast<Tool>(i));
-            }
         }
         ImGui::EndCombo();
     }
     switch (_toolPicker.getTool())
     {
-    case Tool::BoxSelect: case Tool::CircleSelect:
+    case Tool::BoxSelect: case Tool::CircleSelect: case Tool::LassoSelect:
         ImGui::SameLine();
         ImGui::PushItemWidth(100.f);
         if (ImGui::BeginCombo("Select mode"_C, LL::ind("boxSelectMode[]", static_cast<int32_t>(_toolPicker.selectMode)).c_str()))
@@ -727,26 +753,41 @@ void glxy::App::SubTitleBar()
         break;
     case Tool::Pan: case Tool::Zoom:
         break;
-    case Tool::MoveSelection:
+    case Tool::MoveSelected: case Tool::MoveSelection:
     {
         bool statement = false;
         ImGui::SameLine();
         if (activeImageEditor >= 0)
         {
             lock_guard lock(_imageEditor.at(activeImageEditor)->common.mtxEditorWorkerCommon);
-            statement = _imageEditor.at(activeImageEditor)->common.getMoveSelection();
+            if (_toolPicker.getTool() == Tool::MoveSelected)
+                statement = _imageEditor.at(activeImageEditor)->common.getMoveSelected();
+            else
+                statement = _imageEditor.at(activeImageEditor)->common.getMoveSelection();
         }
         ImGui::BeginDisabled(!statement);
-        if (ImGui::Button("Cancel"_C) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+        if (ImGui::ImageButton("Cancel"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0, 0), Vector2f(0.5f, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
         {
             _imageEditor.at(activeImageEditor)->ResetMovePixels();
             popUpState.push_back(PopUpState::ThreadWork);
         }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Cancel"_C);
+            ImGui::EndTooltip();
+        }
         ImGui::SameLine();
-        if (ImGui::Button("Finish"_C) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+        if (ImGui::ImageButton("Finish"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0.5f, 0), Vector2f(1, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
         {
             _imageEditor.at(activeImageEditor)->FinishMovePixels();
             popUpState.push_back(PopUpState::ThreadWork);
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Finish"_C);
+            ImGui::EndTooltip();
         }
         ImGui::EndDisabled();
         break;
@@ -773,34 +814,50 @@ void glxy::App::SubTitleBar()
             statement = _imageEditor.at(activeImageEditor)->common.getWandFill();
         }
         ImGui::BeginDisabled(!statement);
-        if (ImGui::Button("Cancel"_C) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+        if (ImGui::ImageButton("Cancel"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0, 0), Vector2f(0.5f, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+        {
             AddWorkAndWait(CanvasWork::Cancel{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Cancel"_C);
+            ImGui::EndTooltip();
+        }
         ImGui::SameLine();
-        if (ImGui::Button("Finish"_C) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+        if (ImGui::ImageButton("Finish"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0.5f, 0), Vector2f(1, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+        {
             AddWorkAndWait(CanvasWork::Finish{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Finish"_C);
+            ImGui::EndTooltip();
+        }
         ImGui::EndDisabled();
         break;
     }
     case Tool::Brush:
         ImGui::SameLine();
-        ImGui::PushItemWidth(50.f);
-        ImGui::InputFloat("Radius"_C, &_toolPicker.brushRadius, 0, 0, "%.1f");
+        ImGui::PushItemWidth(120.f);
+        ImGui::InputFloat("Radius"_C, &settings.brushRadius, 1, 5, "%.1f");
         if (ImGui::IsItemDeactivatedAfterEdit())
         {
-            _toolPicker.brushRadius = std::clamp(_toolPicker.brushRadius, 0.5f, 1000.f);
+            settings.brushRadius = std::clamp(settings.brushRadius, 0.5f, 1000.f);
             for (auto& n : _imageEditor)
-                n->OptionSetBrushSize(_toolPicker.brushRadius);
+                n->OptionSetBrushSize(settings.brushRadius);
         }
         break;
     case Tool::Eraser:
         ImGui::SameLine();
-        ImGui::PushItemWidth(50.f);
-        ImGui::InputFloat("Radius"_C, &_toolPicker.eraserRadius, 0, 0, "%.1f");
+        ImGui::PushItemWidth(120.f);
+        ImGui::InputFloat("Radius"_C, &settings.eraserRadius, 1, 5, "%.1f");
         if (ImGui::IsItemDeactivatedAfterEdit())
         {
-            _toolPicker.eraserRadius = std::clamp(_toolPicker.eraserRadius, 0.5f, 1000.f);
+            settings.eraserRadius = std::clamp(settings.eraserRadius, 0.5f, 1000.f);
             for (auto& n : _imageEditor)
-                n->OptionSetBrushSize(_toolPicker.eraserRadius);
+                n->OptionSetBrushSize(settings.eraserRadius);
         }
         break;
     case Tool::Bucket:
@@ -825,11 +882,27 @@ void glxy::App::SubTitleBar()
             statement = _imageEditor.at(activeImageEditor)->common.getBucketFill();
         }
         ImGui::BeginDisabled(!statement);
-        if (ImGui::Button("Cancel"_C) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+        if (ImGui::ImageButton("Cancel"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0, 0), Vector2f(0.5f, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+        {
             AddWorkAndWait(CanvasWork::Cancel{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Cancel"_C);
+            ImGui::EndTooltip();
+        }
         ImGui::SameLine();
-        if (ImGui::Button("Finish"_C) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+        if (ImGui::ImageButton("Finish"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0.5f, 0), Vector2f(1, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+        {
             AddWorkAndWait(CanvasWork::Finish{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Finish"_C);
+            ImGui::EndTooltip();
+        }
         ImGui::EndDisabled();
         break;
     }
@@ -843,11 +916,357 @@ void glxy::App::SubTitleBar()
             statement = _imageEditor.at(activeImageEditor)->common.getGradientDraw();
         }
         ImGui::BeginDisabled(!statement);
-        if (ImGui::Button("Cancel"_C) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+        if (ImGui::ImageButton("Cancel"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0, 0), Vector2f(0.5f, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+        {
             AddWorkAndWait(CanvasWork::Cancel{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Cancel"_C);
+            ImGui::EndTooltip();
+        }
         ImGui::SameLine();
-        if (ImGui::Button("Finish"_C) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+        if (ImGui::ImageButton("Finish"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0.5f, 0), Vector2f(1, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+        {
             AddWorkAndWait(CanvasWork::Finish{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Finish"_C);
+            ImGui::EndTooltip();
+        }
+        ImGui::EndDisabled();
+        break;
+    }
+    case Tool::ColorSwap:
+    {
+        ImGui::SameLine();
+        ImGui::PushItemWidth(120.f);
+        ImGui::InputFloat("Radius"_C, &settings.colorSwapRadius, 1, 5, "%.1f");
+        if (ImGui::IsItemDeactivatedAfterEdit())
+        {
+            settings.colorSwapRadius = std::clamp(settings.colorSwapRadius, 0.5f, 200.f);
+            for (auto& n : _imageEditor)
+                n->OptionSetBrushSize(settings.colorSwapRadius);
+        }
+        ImGui::SameLine();
+        ImGui::PushItemWidth(200.f);
+        int32_t tolerance = settings.colorSwapTolerance;
+        if (ImGui::SliderInt("Tolerance"_C, &tolerance, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp))
+            settings.colorSwapTolerance = tolerance;
+        break;
+    }
+    case Tool::Shapes:
+    {
+        ImGui::SameLine();
+        bool statement = false;
+        if (activeImageEditor >= 0)
+        {
+            lock_guard lock(_imageEditor.at(activeImageEditor)->common.mtxEditorWorkerCommon);
+            statement = _imageEditor.at(activeImageEditor)->common.getShapeDraw();
+        }
+        if (ImGui::BeginCombo("Shape"_C, LL::ind("shapeName[]", settings.shapeID).c_str()))
+        {
+            const float uvSizeX = 1.f / static_cast<int8_t>(ShapeType::Count);
+            for (int8_t i = 0; i < static_cast<int8_t>(ShapeType::Count); i++)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, settings.shapeID == i ? 2.f : 0.f);
+                if (ImGui::ImageButton(LL::ind("shapeName[]", i).c_str(), shapeTextures.getNativeHandle(), Vector2f(24, 24) * settings.GUIScale,
+                    Vector2f(uvSizeX * i, 0), Vector2f(uvSizeX * (i + 1), 1)))
+                {
+                    settings.shapeID = i;
+                    if (statement)
+                    {
+                        RenderShapes::getShape(_imageEditor.at(activeImageEditor)->shape, static_cast<ShapeType>(i),
+                            _imageEditor.at(activeImageEditor)->shapeSize, settings.shapeRadius);
+                        AddWork(CanvasWork::ShapePixels{std::make_shared<ConvexShape>(_imageEditor.at(activeImageEditor)->shape),
+                            _layerPicker.getLayerIDSelected(activeImageEditor)});
+                    }
+                }
+                ImGui::PopStyleVar();
+                if (ImGui::BeginItemTooltip())
+                {
+                    ImGui::Text("%s", LL::ind("shapeName[]", i).c_str());
+                    ImGui::EndTooltip();
+                }
+                if (i % 4 != 3)
+                    ImGui::SameLine();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        ImGui::PushItemWidth(80.f * settings.GUIScale);
+        if (ImGui::BeginCombo("##MoreOptions", "More"_C))
+        {
+            switch (static_cast<ShapeType>(settings.shapeID))
+            {
+            case ShapeType::RoundedRectangle: case ShapeType::Star3:
+            case ShapeType::Star4: case ShapeType::Star5:
+                ImGui::BeginDisabled(false);
+                break;
+            default:
+                ImGui::BeginDisabled(true);
+                break;
+            }
+            ImGui::PushItemWidth(110.f * settings.GUIScale);
+            ImGui::InputFloat("Radius"_C, &settings.shapeRadius, 1, 5, "%.1f");
+            if (statement && ImGui::IsItemDeactivatedAfterEdit())
+            {
+                settings.shapeRadius = max(0, static_cast<int32_t>(settings.shapeRadius));
+                RenderShapes::getShape(_imageEditor.at(activeImageEditor)->shape, static_cast<ShapeType>(settings.shapeID),
+                    _imageEditor.at(activeImageEditor)->shapeSize, settings.shapeRadius);
+                AddWork(CanvasWork::ShapePixels{std::make_shared<ConvexShape>(_imageEditor.at(activeImageEditor)->shape),
+                    _layerPicker.getLayerIDSelected(activeImageEditor)});
+            }
+            ImGui::EndDisabled();
+            ImGui::PushItemWidth(110.f * settings.GUIScale);
+            ImGui::InputFloat("Outline thickness"_C, &settings.shapeOutlineThickness, 1, 5, "%.2f");
+            if (statement && ImGui::IsItemDeactivatedAfterEdit())
+            {
+                settings.shapeOutlineThickness = max(0, static_cast<int32_t>(settings.shapeOutlineThickness));
+                _imageEditor.at(activeImageEditor)->shape.setOutlineThickness(settings.shapeOutlineThickness);
+                AddWork(CanvasWork::ShapePixels{std::make_shared<ConvexShape>(_imageEditor.at(activeImageEditor)->shape),
+                    _layerPicker.getLayerIDSelected(activeImageEditor)});
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!statement);
+        if (ImGui::ImageButton("Cancel"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0, 0), Vector2f(0.5f, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+        {
+            AddWorkAndWait(CanvasWork::Cancel{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Cancel"_C);
+            ImGui::EndTooltip();
+        }
+        ImGui::SameLine();
+        if (ImGui::ImageButton("Finish"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0.5f, 0), Vector2f(1, 1)) || statement && popUpState.empty() && InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+        {
+            AddWorkAndWait(CanvasWork::Finish{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Finish"_C);
+            ImGui::EndTooltip();
+        }
+        ImGui::EndDisabled();
+        break;
+    }
+    case Tool::Text:
+    {
+        bool statement = false;
+        if (activeImageEditor >= 0)
+        {
+            lock_guard lock(_imageEditor.at(activeImageEditor)->common.mtxEditorWorkerCommon);
+            statement = _imageEditor.at(activeImageEditor)->common.getTextDraw();
+        }
+        float textSize = settings.textSize;
+        ImGui::SameLine();
+        if (ImGui::BeginCombo("Font"_C, fontPaths.at(
+            std::clamp(static_cast<int32_t>(settings.fontID), 0, static_cast<int32_t>(fontPaths.size()) - 1)).filename().string().c_str()))
+        {
+            for (uint16_t i = 0; i < fontPaths.size(); i++)
+            {
+                if (ImGui::Selectable(fontPaths.at(i).filename().string().c_str()))
+                {
+                    settings.fontID = i;
+                    if (i == 0)
+                        textFont = std::make_shared<Font>(mainFont);
+                    else
+                        textFont = std::make_shared<Font>(fontPaths.at(i));
+                    textFont->setSmooth(true);
+                    if (statement)
+                    {
+                        _imageEditor.at(activeImageEditor)->text.setFont(*textFont);
+                        _imageEditor.at(activeImageEditor)->UpdateTextUIPosition();
+                        AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                            _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+                    }
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        ImGui::PushItemWidth(110.f * settings.GUIScale);
+        if (ImGui::InputFloat("Size"_C, &textSize, 0.25f, 0.25f, "%.0f"))
+        {
+            const float t = fmod(textSize, 1.f);
+            if (t == 0)
+            {
+                settings.textSize = fmax(textSize, 1.f);
+                if (statement)
+                {
+                    _imageEditor.at(activeImageEditor)->text.setCharacterSize(settings.textSize);
+                    _imageEditor.at(activeImageEditor)->UpdateTextUIPosition();
+                    AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                        _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+                }
+            }
+            else
+            {
+                int8_t idAbove = 0;
+                int8_t idBelow = 0;
+                for (int8_t i = 0; i < c_textSizes.size(); i++)
+                {
+                    if (c_textSizes.at(i) < settings.textSize)
+                    {
+                        idBelow = i;
+                        idAbove = i + 1;
+                    }
+                    if (settings.textSize == c_textSizes.at(i))
+                    {
+                        idBelow = i - 1;
+                        idAbove = i + 1;
+                        break;
+                    }
+                }
+                if (t > 0.5f)
+                {
+                    settings.textSize = c_textSizes.at(max(static_cast<int32_t>(idBelow), 0));
+                    if (statement)
+                    {
+                        _imageEditor.at(activeImageEditor)->text.setCharacterSize(settings.textSize);
+                        _imageEditor.at(activeImageEditor)->UpdateTextUIPosition();
+                        AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                            _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+                    }
+                }
+                else if (t < 0.5f)
+                {
+                    settings.textSize = c_textSizes.at(min(static_cast<int32_t>(idAbove), static_cast<int32_t>(c_textSizes.size() - 1)));
+                    if (statement)
+                    {
+                        _imageEditor.at(activeImageEditor)->text.setCharacterSize(settings.textSize);
+                        _imageEditor.at(activeImageEditor)->UpdateTextUIPosition();
+                        AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                            _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+                    }
+                }
+            }
+        }
+
+        ImGui::SameLine();
+        ImGui::PushItemWidth(80.f * settings.GUIScale);
+        if (ImGui::BeginCombo("##MoreOptions", "More"_C))
+        {
+            const array iconsMain = { "Align left"_S, "Align center"_S, "Align right"_S };
+            const array iconsOptional = {"Bold"_S, "Italic"_S, "Underlined"_S, "Strikethrough"_S};
+            const float uvSizeX = 1.f / (iconsMain.size() + iconsOptional.size());
+            for (int8_t i = 0; i < iconsOptional.size(); i++)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, settings.textStyle >> i & 1 ? 2.f : 0.f);
+                if (ImGui::ImageButton(iconsOptional.at(i).c_str(), textIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+                    Vector2f(uvSizeX * i, 0), Vector2f(uvSizeX * (i + 1), 1)))
+                {
+                    settings.textStyle ^= 1 << i;
+                    if (statement)
+                    {
+                        _imageEditor.at(activeImageEditor)->text.setStyle(settings.textStyle);
+                        _imageEditor.at(activeImageEditor)->UpdateTextUIPosition();
+                        AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                            _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+                    }
+                }
+                ImGui::PopStyleVar();
+                if (ImGui::BeginItemTooltip())
+                {
+                    ImGui::Text("%s", iconsOptional.at(i).c_str());
+                    ImGui::EndTooltip();
+                }
+                ImGui::SameLine();
+            }
+            for (int8_t i = 0; i < iconsMain.size(); i++)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, settings.textAlignment == i ? 2.f : 0.f);
+                if (ImGui::ImageButton(iconsMain.at(i).c_str(), textIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+                    Vector2f(uvSizeX * (i + iconsOptional.size()), 0), Vector2f(uvSizeX * (i + iconsOptional.size() + 1), 1)))
+                {
+                    settings.textAlignment = i;
+                    if (statement)
+                    {
+                        switch (settings.textAlignment)
+                        {
+                        case 0: _imageEditor.at(activeImageEditor)->text.setLineAlignment(Text::LineAlignment::Left); break;
+                        case 1: _imageEditor.at(activeImageEditor)->text.setLineAlignment(Text::LineAlignment::Center); break;
+                        case 2: _imageEditor.at(activeImageEditor)->text.setLineAlignment(Text::LineAlignment::Right); break;
+                        }
+                        _imageEditor.at(activeImageEditor)->UpdateTextUIPosition();
+                        AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                            _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+                    }
+                }
+                ImGui::PopStyleVar();
+                if (ImGui::BeginItemTooltip())
+                {
+                    ImGui::Text("%s", iconsMain.at(i).c_str());
+                    ImGui::EndTooltip();
+                }
+                ImGui::SameLine();
+            }
+            ImGui::Spacing();
+            ImGui::PushItemWidth(110.f * settings.GUIScale);
+            ImGui::InputFloat("Outline thickness"_C, &settings.textOutlineThickness, 1, 5, "%.2f");
+            if (statement && ImGui::IsItemDeactivatedAfterEdit())
+            {
+                settings.textOutlineThickness = fabsf(settings.textOutlineThickness);
+                _imageEditor.at(activeImageEditor)->text.setOutlineThickness(settings.textOutlineThickness);
+                _imageEditor.at(activeImageEditor)->UpdateTextUIPosition();
+                AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                    _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+            }
+            ImGui::PushItemWidth(110.f * settings.GUIScale);
+            ImGui::InputFloat("Letter spacing"_C, &settings.letterSpacing, 1, 5, "%.2f");
+            if (statement && ImGui::IsItemDeactivatedAfterEdit())
+            {
+                _imageEditor.at(activeImageEditor)->text.setLetterSpacing(settings.letterSpacing);
+                _imageEditor.at(activeImageEditor)->UpdateTextUIPosition();
+                AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                    _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+            }
+            ImGui::PushItemWidth(110.f * settings.GUIScale);
+            ImGui::InputFloat("Line spacing"_C, &settings.lineSpacing, 1, 5, "%.2f");
+            if (statement && ImGui::IsItemDeactivatedAfterEdit())
+            {
+                _imageEditor.at(activeImageEditor)->text.setLineSpacing(settings.lineSpacing);
+                _imageEditor.at(activeImageEditor)->UpdateTextUIPosition();
+                AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                    _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!statement);
+        if (ImGui::ImageButton("Cancel"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0, 0), Vector2f(0.5f, 1)))
+        {
+            _imageEditor.at(activeImageEditor)->textString.clear();
+            _imageEditor.at(activeImageEditor)->wantInput = false;
+            AddWorkAndWait(CanvasWork::Cancel{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Cancel"_C);
+            ImGui::EndTooltip();
+        }
+        ImGui::SameLine();
+        if (ImGui::ImageButton("Finish"_C, finalizeIcons.getNativeHandle(), Vector2f(15, 15) * settings.GUIScale,
+            Vector2f(0.5f, 0), Vector2f(1, 1)))
+        {
+            _imageEditor.at(activeImageEditor)->textString.clear();
+            _imageEditor.at(activeImageEditor)->wantInput = false;
+            AddWorkAndWait(CanvasWork::Finish{});
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", "Finish"_C);
+            ImGui::EndTooltip();
+        }
         ImGui::EndDisabled();
         break;
     }
@@ -913,9 +1332,24 @@ void glxy::App::MainWindow()
                 AddWork(CanvasWork::GradientPixels{n->gradientStart.getPosition(), n->gradientEnd.getPosition(),
                     _colorPicker.getColor(0), _colorPicker.getColor(1), _layerPicker.getLayerIDSelected(activeImageEditor)});
             }
+            if (lock_guard lock(n->common.mtxEditorWorkerCommon);
+                n->common.getShapeDraw())
+            {
+                _imageEditor.at(activeImageEditor)->shape.setFillColor(_colorPicker.getColor(0));
+                _imageEditor.at(activeImageEditor)->shape.setOutlineColor(_colorPicker.getColor(1));
+                AddWork(CanvasWork::ShapePixels{ std::make_shared<ConvexShape>(_imageEditor.at(activeImageEditor)->shape),
+                    _layerPicker.getLayerIDSelected(activeImageEditor)});
+            }
+            if (lock_guard lock(n->common.mtxEditorWorkerCommon);
+                n->common.getTextDraw())
+            {
+                _imageEditor.at(activeImageEditor)->text.setFillColor(_colorPicker.getColor(0));
+                _imageEditor.at(activeImageEditor)->text.setOutlineColor(_colorPicker.getColor(1));
+                AddWork(CanvasWork::TextPixels{ textFont, std::make_shared<Text>(_imageEditor.at(activeImageEditor)->text),
+                    _imageEditor.at(activeImageEditor)->text.getGlobalBounds(), _layerPicker.getLayerIDSelected(activeImageEditor)});
+            }
         }
     }
-    UpdateRenderWorker();
     if (settings.syncViewport && hoveredImageEditor >= 0)
     {
         const Vector2f center = _imageEditor.at(hoveredImageEditor)->view.getCenter();
@@ -944,194 +1378,6 @@ void glxy::App::MainWindow()
     }
 }
 
-void glxy::App::UpdateRenderWorker() const
-{
-    if (!RenderWorker::hasWork())
-        return;
-    const int32_t todoWork = RenderWorker::getWorkAmount();
-    const array<pair<int32_t, Time>, 4> cutoff = {
-        pair{10, milliseconds(5)},
-        pair{20, milliseconds(10)},
-        pair{30, milliseconds(15)},
-        pair{40, milliseconds(20)},
-    };
-    Time maxTime = cutoff.back().second;
-    for (int32_t i = 0; i < cutoff.size(); i++)
-    {
-        if (todoWork < cutoff.at(i).first)
-        {
-            maxTime = cutoff.at(i).second;
-            break;
-        }
-    }
-    const Clock workTime;
-    do
-    {
-        if (!RenderWorker::hasWork())
-            break;
-        RenderWorkBatch batch = RenderWorker::getWorkTodo();
-        array<RenderTexture, RenderWorkBatch::BatchMaxSize> textures;
-
-        for (int8_t i = 0; i < batch.work.size(); i++)
-        {
-            const unique_ptr<RenderWork> work = std::move(batch.work.at(i));
-            RenderTexture& renderTexture = textures.at(i);
-
-            auto& ie = _imageEditor.at(work->getEditorID());
-            if (const auto v = work->get<RenderWork::MergeLayers>())
-            {
-                const Vector2u chunkSize = ie->chunkManager.getChunkSize(v->chunkID);
-                validate(renderTexture.resize(chunkSize, {0U, 0U, 0U, 0U, 0U}));
-
-                renderTexture.clear(Color::Transparent);
-                renderTexture.setView(View(FloatRect({0.f, 0.f}, Vector2f(chunkSize))));
-
-                ImageChunkTexture::RenderLayerToTexture(*ie->chunkManager.getChunkImageColor(v->chunkID, v->lowerLayerID),
-                    chunkSize, 255, c_blendModes.at(ie->chunkManager.getLayerBlendMode(v->lowerLayerID)), renderTexture);
-                ImageChunkTexture::RenderLayerToTexture(*ie->chunkManager.getChunkImageColor(v->chunkID, v->upperLayerID),
-                    chunkSize, ie->chunkManager.getLayerTransparency(v->upperLayerID), c_blendModes.at(ie->chunkManager.getLayerBlendMode(v->upperLayerID)), renderTexture);
-            }
-            else if (const auto v = work->get<RenderWork::MergeColorTempLayer>())
-            {
-                const Vector2u chunkSize = ie->chunkManager.getChunkSize(v->chunkID);
-                validate(renderTexture.resize(chunkSize, {0U, 0U, 0U, 0U, 0U}));
-
-                renderTexture.clear(Color::Transparent);
-                renderTexture.setView(View(FloatRect({0.f, 0.f}, Vector2f(chunkSize))));
-
-                ImageChunkTexture::RenderLayerToTexture(*ie->chunkManager.getChunkImageColor(v->chunkID, v->lowerLayerID),
-                    chunkSize, 255, BlendNone, renderTexture);
-                ImageChunkTexture::RenderLayerToTexture(*ie->chunkManager.getChunkImageColorTemp(v->chunkID),
-                    chunkSize, 255, v->blendMode, renderTexture);
-            }
-            else if (const auto v = work->get<RenderWork::RenderSelection>())
-            {
-                const Vector2u chunkSize = ie->chunkManager.getChunkSize(v->chunkID);
-                const uint16_t chunkGeneralSize = ie->chunkManager.getChunkSize();
-                const Vector2u chunkCount = ie->chunkManager.getChunkCount();
-                validate(renderTexture.resize(chunkSize, {0U, 0U, 0U, 0U, 0U}));
-
-                const Vector2u chunk = Vector2u(v->chunkID % chunkCount.x, v->chunkID / chunkCount.x);
-
-                renderTexture.clear(Color::Transparent);
-
-                if (v->isFinal)
-                {
-                    renderTexture.setView(View(FloatRect(Vector2f(0, 0), Vector2f(chunkSize))));
-                    ImageChunkTexture::RenderLayerToTexture(*ie->chunkManager.getChunkImageSelection(v->chunkID),
-                        chunkSize, 255, BlendNone, renderTexture);
-                }
-
-                renderTexture.setView(View(FloatRect(Vector2f(chunk.x * chunkGeneralSize, chunk.y * chunkGeneralSize), Vector2f(chunkSize))));
-                if (v->shapeSelectionType == ShapeSelectType::Box)
-                {
-                    RectangleShape shape;
-                    shape.setFillColor(Color::Black);
-                    if (v->isFinal && !v->additive)
-                        shape.setFillColor(Color::Transparent);
-
-                    shape.setPosition(Vector2f(v->area.position));
-                    shape.setScale(Vector2f(v->area.size));
-                    shape.setSize(Vector2f(1, 1));
-
-                    renderTexture.draw(shape, BlendNone);
-                }
-                else if (v->shapeSelectionType == ShapeSelectType::Circle)
-                {
-                    CircleShape shape;
-                    shape.setFillColor(Color::Black);
-                    if (v->isFinal && !v->additive)
-                        shape.setFillColor(Color::Transparent);
-
-                    shape.setPointCount(fmax(2.f * 3.14159265f * sqrtf(fmax(v->area.size.x, v->area.size.y)), 20.f));
-                    shape.setRadius(0.5f);
-                    shape.setPosition(Vector2f(v->area.position));
-                    shape.setScale(Vector2f(v->area.size));
-
-                    renderTexture.draw(shape, BlendNone);
-                }
-            }
-            else if (const auto v = work->get<RenderWork::BrushDraw>())
-            {
-                const Vector2u chunkSize = ie->chunkManager.getChunkSize(v->chunkID);
-                const Vector2u chunkCount = ie->chunkManager.getChunkCount();
-                const Vector2u chunk = Vector2u(v->chunkID % chunkCount.x, v->chunkID / chunkCount.x);
-                const uint16_t chunkGeneralSize = ie->chunkManager.getChunkSize();
-
-                validate(renderTexture.resize(chunkSize, {0U, 8U, 0U, 0U, 0U}));
-
-                renderTexture.clear(v->isEraser ? Color::White : Color::Transparent);
-                renderTexture.clearStencil(0x00);
-
-#ifdef GL_ALPHA_TEST
-                renderTexture.resetGLStates(); // workaround for mixing SFML with OpenGL
-#endif
-
-                if (ie->chunkManager.hasColorTempLayer(v->chunkID))
-                {
-                    ImageChunkTexture::RenderLayerToTexture(*ie->chunkManager.getChunkImageColorTemp(v->chunkID),
-                        chunkSize, 255, BlendNone, renderTexture);
-                }
-
-                if (ie->chunkManager.hasSelectionLayer(v->chunkID))
-                {
-#ifdef GL_ALPHA_TEST
-                    glEnable(GL_ALPHA_TEST);
-                    glAlphaFunc(GL_GREATER, 0.5f);
-#endif
-                    ImageChunkTexture::RenderLayerToTexture(*ie->chunkManager.getChunkImageSelection(v->chunkID),
-                        chunkSize, 255, RenderStates(StencilMode{
-                            StencilComparison::Always, StencilUpdateOperation::Increment, 0x01, 0xFF, true}), renderTexture);
-#ifdef GL_ALPHA_TEST
-                    glDisable(GL_ALPHA_TEST);
-#endif
-                }
-
-                renderTexture.setView(View(FloatRect(Vector2f(chunk.x * chunkGeneralSize, chunk.y * chunkGeneralSize), Vector2f(chunkSize))));
-
-                CircleShape shape;
-                shape.setFillColor(v->color);
-
-                RenderStates states;
-                states.blendMode = BlendNone;
-                states.stencilMode = {ie->chunkManager.hasSelectionLayer(v->chunkID) ? StencilComparison::Equal : StencilComparison::Always,
-                    StencilUpdateOperation::Keep, 0x01, 0xFF, false};
-
-                shape.setPointCount(fmax(2.f * 3.14159265f * sqrtf(v->radius), 20.f));
-                shape.setRadius(v->radius);
-                shape.setOrigin(Vector2f(v->radius, v->radius));
-
-                shape.setPosition(Vector2f(Vector2i(v->start)) + Vector2f(0.5f, 0.5f));
-                renderTexture.draw(shape, states);
-
-                shape.setPosition(Vector2f(Vector2i(v->end)) + Vector2f(0.5f, 0.5f));
-                renderTexture.draw(shape, states);
-
-                if (v->start != v->end)
-                {
-                    const Vector2f diff = v->end - v->start;
-                    const Vector2f perp = diff.perpendicular().normalized();
-                    const array<Vertex, 4> connect = {
-                        Vertex{Vector2f(v->start + perp * v->radius), v->color},
-                        Vertex{Vector2f(v->start + -perp * v->radius), v->color},
-                        Vertex{Vector2f(v->end + -perp * v->radius), v->color},
-                        Vertex{Vector2f(v->end + perp * v->radius), v->color}
-                    };
-                    renderTexture.draw(connect.data(), 4, PrimitiveType::TriangleFan, states);
-                }
-            }
-            renderTexture.display();
-        }
-
-        for (int8_t i = 0; i < batch.work.size(); i++)
-        {
-            RenderWorker::AddResult(RenderResult::Chunk{textures.at(i).getTexture().copyToImage()});
-            RenderWorker::RemoveWorkTodo();
-        }
-
-    } while (workTime.getElapsedTime() <= maxTime);
-}
-
 void glxy::App::setActiveEditor(const EditorID ID)
 {
     activeImageEditor = ID;
@@ -1153,7 +1399,7 @@ void glxy::App::app()
         {
             ImGui::SFML::ProcessEvent(window, *event);
             if (event->is<Event::Closed>())
-                ExitApp(true);
+                MenuExit(true);
             else if (const auto n = event->getIf<Event::Resized>())
                 RescaleWindow(n->size);
             InputEvent::EventUpdate(*event);
@@ -1205,33 +1451,30 @@ void glxy::App::app()
         for (EditorID i = 0; i < _imageEditor.size(); i++)
         {
             if (_imageEditor.at(i)->windowFocused)
-            {
                 setActiveEditor(i);
-            }
             if (_imageEditor.at(i)->windowHovered)
-            {
                 setHoveredEditor(i);
-            }
         }
-        if (!someEditorHovered && cursorType != Cursor::Type::Arrow)
-        {
-            setCursorType(Cursor::Type::Arrow);
-        }
+        if (!someEditorHovered && Cursors::getCursor() != Cursors::Type::Arrow)
+            Cursors::setCursor(Cursors::Type::Arrow, window);
         if (!someEditorHovered && activeImageEditor != -1)
         {
             _toolPicker.setTool(_imageEditor.at(activeImageEditor)->currentTool, false);
+            _toolPicker.setToolsEnabled(_imageEditor.at(activeImageEditor)->isInfinite ? c_infiniteToolsEnabled : 0xFFFFFF);
             for (int8_t i = 0; i < c_colorCount; i++)
                 _colorPicker.setEditorColors(i, _imageEditor.at(activeImageEditor)->currentColor.at(i));
         }
         else if (hoveredImageEditor != -1)
         {
             _toolPicker.setTool(_imageEditor.at(hoveredImageEditor)->currentTool, false);
+            _toolPicker.setToolsEnabled(_imageEditor.at(hoveredImageEditor)->isInfinite ? c_infiniteToolsEnabled : 0xFFFFFF);
             for (int8_t i = 0; i < c_colorCount; i++)
                 _colorPicker.setEditorColors(i, _imageEditor.at(hoveredImageEditor)->currentColor.at(i));
         }
         else if (activeImageEditor != -1)
         {
             _toolPicker.setTool(_imageEditor.at(activeImageEditor)->currentTool, false);
+            _toolPicker.setToolsEnabled(_imageEditor.at(activeImageEditor)->isInfinite ? c_infiniteToolsEnabled : 0xFFFFFF);
             for (int8_t i = 0; i < c_colorCount; i++)
                 _colorPicker.setEditorColors(i, _imageEditor.at(activeImageEditor)->currentColor.at(i));
         }
@@ -1338,6 +1581,12 @@ void glxy::App::app()
             RescaleWindow(settings.resolution);
             settings.Save();
         }
+        if (activeImageEditor >= 0 && Shortcuts()[ActionShortcut::Search] && !GLOBAL.wantInput && popUpState.empty())
+        {
+            if (lock_guard lock(_imageEditor.at(activeImageEditor)->common.mtxEditorWorkerCommon);
+                !_imageEditor.at(activeImageEditor)->common.getTextDraw())
+                popUpState.push_back(PopUpState::Search);
+        }
         PopUp();
 
         ImGui::PopItemFlag();
@@ -1361,15 +1610,15 @@ void glxy::App::app()
 void glxy::App::OpenImage(const filesystem::path& fileName)
 {
     CanvasWorker::waitWork();
-    CanvasWorker::AddEditor();
-    _imageEditor.emplace_back(std::make_shared<ImageEditor>(settings, window, popUpState, cursor, cursorType, _colorPicker,
+    CanvasWorker::AddEditor(false);
+    _imageEditor.emplace_back(std::make_shared<ImageEditor>(settings, window, popUpState, _colorPicker,
         _imageEditor.size() ? _imageEditor.back()->dockID : mainDockID, _toolPicker, _layerPicker, gizmoIcons, mainFont,
         CanvasWorker::getChunkManager(static_cast<EditorID>(_imageEditor.size())),
         CanvasWorker::getCommon(static_cast<EditorID>(_imageEditor.size())),
-        static_cast<int16_t>(_imageEditor.size())));
+        static_cast<int16_t>(_imageEditor.size()), false, textFont));
 
     setActiveEditor(_imageEditor.size() - 1);
-    _layerPicker.createNewImage();
+    _layerPicker.createNewImage(false);
 
     AddWorkAndWait(CanvasWork::ImageOpen{fileName});
     _imageEditor.back()->imagePath = fileName;

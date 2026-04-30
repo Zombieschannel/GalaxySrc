@@ -4,6 +4,7 @@
 #include "../PopUpState.hpp"
 #include "../ZEditorsCommon/ZTB.hpp"
 #include "../ZEditorsCommon/Languages.hpp"
+#include <imgui.h>
 
 LayerID LayerPicker::getLayerIDSelected(const EditorID arrayID) const
 {
@@ -15,13 +16,16 @@ const LayerPicker::Layer& LayerPicker::getLayer(const EditorID arrayID, const La
     return imageLayers.at(arrayID).layers.at(layerID);
 }
 
-void LayerPicker::createNewImage()
+void LayerPicker::createNewImage(const bool infinite)
 {
-    imageLayers.emplace_back();
+    imageLayers.emplace_back(ImageLayer{infinite});
     imageLayers.back().layers.emplace_back();
     imageLayers.back().layers.back().name = "Layer 1";
-    validate(imageLayers.back().layers.back().texture.loadFromImage(Image(Vector2u(c_layerPreviewTextureSize, c_layerPreviewTextureSize), Color::White)));
-    imageLayers.back().layers.back().texture.setSmooth(true);
+    if (!infinite)
+    {
+        validate(imageLayers.back().layers.back().texture.loadFromImage(Image(Vector2u(c_layerPreviewTextureSize, c_layerPreviewTextureSize), Color::White)));
+        imageLayers.back().layers.back().texture.setSmooth(true);
+    }
 }
 
 void LayerPicker::deleteLayer(const EditorID editorID)
@@ -104,6 +108,9 @@ void LayerPicker::createNewLayer(const EditorID editorID)
 LayerPicker::Return LayerPicker::Draw(const Window& window, const float& GUIScale, const Texture& layerIcons,
     vector<PopUpState>& popUpState, const EditorID editorID)
 {
+    if (!windowOpen)
+        return Return::None;
+
     Return result = Return::None;
 
     static LayerID lastHoveredLayer = -1;
@@ -118,114 +125,129 @@ LayerPicker::Return LayerPicker::Draw(const Window& window, const float& GUIScal
     ImGui::SetNextWindowPos(Vector2f(window.getSize().x - 25 * GUIScale - windowSize.x, window.getSize().y - 40 * GUIScale - windowSize.y));
     ImGui::SetNextWindowSize(windowSize);
 
-    const ImVec4 t = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(t.x, t.y, t.z, 0.8f));
+    const Color32f t = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, Color32f(t.r, t.g, t.b, 0.8f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Vector2f(5, 5));
-    if (ImGui::Begin("Layers"_C, nullptr,
+
+    if (!ImGui::Begin("windowName[2]"_C, &windowOpen,
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
     {
-        if (ImGui::BeginChild("Scroll", Vector2f(ImGui::GetContentRegionAvail().x, -25 * GUIScale - ImGui::GetStyle().ItemSpacing.y)) && editorID >= 0)
-        {
-            const Color layerActive = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
-            const Color layerClicked = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
-            const Color layerHovered = ImGui::GetStyleColorVec4(ImGuiCol_Button);
-            const Color layerOther = Color(32, 32, 32);
-            LayerID j = 0;
-            auto& layers = imageLayers.at(editorID);
-            for (LayerID i = layers.layers.size() - 1; i >= 0; i--)
-            {
-                if (clickedLayer == i)
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, layerClicked);
-                else if (hoveredLayer == i)
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, layerActive);
-                else if (layers.layerIDSelected == i)
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, layerHovered);
-                else
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, layerOther);
+        ImGui::End();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        return result;
+    }
 
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Vector2f(5, 5));
-                if (ImGui::BeginChild(("LayerID" + to_string(j++)).c_str(), Vector2f(ImGui::GetContentRegionAvail().x, 60 * GUIScale), ImGuiChildFlags_AlwaysUseWindowPadding))
+    if (ImGui::BeginChild("Scroll", Vector2f(ImGui::GetContentRegionAvail().x, -25 * GUIScale - ImGui::GetStyle().ItemSpacing.y)) && editorID >= 0)
+    {
+        const Color layerActive = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
+        const Color layerClicked = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+        const Color layerHovered = ImGui::GetStyleColorVec4(ImGuiCol_Button);
+        const Color layerOther = Color(32, 32, 32);
+        LayerID j = 0;
+        auto& layers = imageLayers.at(editorID);
+        for (LayerID i = layers.layers.size() - 1; i >= 0; i--)
+        {
+            if (clickedLayer == i)
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, layerClicked);
+            else if (hoveredLayer == i)
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, layerActive);
+            else if (layers.layerIDSelected == i)
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, layerHovered);
+            else
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, layerOther);
+
+            const int32_t layerBoxSize = layers.infinite ? 40 : 60;
+
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Vector2f(5, 5));
+            if (ImGui::BeginChild(("LayerID" + to_string(j++)).c_str(), Vector2f(ImGui::GetContentRegionAvail().x, layerBoxSize * GUIScale), ImGuiChildFlags_AlwaysUseWindowPadding))
+            {
+                const float width = ImGui::GetContentRegionAvail().x;
+                if (!layers.infinite)
                 {
-                    const float width = ImGui::GetContentRegionAvail().x;
                     ImGui::Image(layers.layers.at(i).texture.getNativeHandle(),
                         Vector2f(ImGui::GetContentRegionAvail().y - 2, ImGui::GetContentRegionAvail().y - 2),
                         Vector2f(0, 0), Vector2f(1, 1), Color::White, Color(128, 128, 128));
-                    ImGui::SetCursorPos(Vector2f(60 * GUIScale + 10, 60 * GUIScale / 3));
-                    if (layers.layers.at(i).name.size() > 10)
-                        ImGui::Text("%s...", layers.layers.at(i).name.substr(0, 7).c_str());
-                    else
-                        ImGui::Text("%s", layers.layers.at(i).name.c_str());
-                    ImGui::SameLine();
-                    ImGui::SetCursorPos(Vector2f(width - 30 * GUIScale, 60 * GUIScale / 2 - 24 * GUIScale / 2));
-                    if (ImGui::Checkbox(("##LayerEnabled" + to_string(j)).c_str(), &layers.layers.at(i).enabled))
-                        result = Return::Visibility;
-
-                    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows))
-                        lastHoveredLayer = i;
-                    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
-                            (InputEvent::isButtonPressed(Mouse::Button::Left) || InputEvent::isTouchPressed(0)))
-                        lastClickedLayer = i;
-                    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
-                            (InputEvent::isButtonReleased(Mouse::Button::Left) || InputEvent::isTouchReleased(0)))
-                        layers.layerIDSelected = i;
-                    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
-                    || InputEvent::isButtonReleased(Mouse::Button::Right)))
-                        popUpState.push_back(PopUpState::LayerProperties);
                 }
-                ImGui::EndChild();
-                ImGui::PopStyleVar();
-                ImGui::PopStyleColor();
-            }
-        }
-        ImGui::EndChild();
-        const uint8_t count = 7;
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, Vector2f(0, 0));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, Vector2f((ImGui::GetContentRegionAvail().x - 25 * GUIScale) / (count - 1) - 25 * GUIScale, 0));
-        const array toolColors = {
-            Color(83, 170, 17), Color(170, 17, 36), Color(170, 163, 17),
-            Color(17, 170, 87), Color(17, 170, 138), Color(17, 65, 170),
-            Color(170, 75, 17),
-        };
-        for (uint8_t i = 0; i < count; i++)
-        {
-            ImGui::PushStyleColor(ImGuiCol_Button, Color(toolColors.at(i).r, toolColors.at(i).g, toolColors.at(i).b, 128));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Color(toolColors.at(i).r, toolColors.at(i).g, toolColors.at(i).b, 192));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color(toolColors.at(i).r, toolColors.at(i).g, toolColors.at(i).b, 255));
 
-            const int16_t layerCount = editorID == -1 ? 0 : imageLayers.at(editorID).layers.size();
-            const LayerID layerSelected = editorID == -1 ? 0 : imageLayers.at(editorID).layerIDSelected;
+                ImGui::SetCursorPos(Vector2f(layerBoxSize * GUIScale + 10, layerBoxSize * GUIScale / 3));
 
-            ImGui::BeginDisabled(editorID == -1 ||
-                (i == 0 && layerCount == c_maxLayers) ||
-                (i == 1 && layerCount == 1 ||
-                i == 3 && layerSelected >= layerCount - 1 ||
-                (i == 4 || i == 5) && layerSelected <= 0));
-            if (ImGui::ImageButton(("LayerButton" + to_string(i)).c_str(), layerIcons.getNativeHandle(), Vector2f(25, 25) * GUIScale,
-                Vector2f(1.f / count * i, 0), Vector2f(1.f / count * (i + 1), 1)))
-            {
-                switch (i)
-                {
-                case 0: result = Return::AddLayer; break;
-                case 1: result = Return::DeleteLayer; break;
-                case 2: result = Return::DuplicateLayer; break;
-                case 3: result = Return::MoveLayerUp; break;
-                case 4: result = Return::MoveLayerDown; break;
-                case 5: result = Return::MergeLayerDown; break;
-                case 6: popUpState.push_back(PopUpState::LayerProperties); break;
-                default: break;
-                }
+                if (layers.layers.at(i).name.size() > 10)
+                    ImGui::Text("%s...", layers.layers.at(i).name.substr(0, 7).c_str());
+                else
+                    ImGui::Text("%s", layers.layers.at(i).name.c_str());
+                ImGui::SameLine();
+
+                ImGui::SetCursorPos(Vector2f(width - (layerBoxSize / 2) * GUIScale, layerBoxSize * GUIScale / 2 - 24 * GUIScale / 2));
+
+                if (ImGui::Checkbox(("##LayerEnabled" + to_string(j)).c_str(), &layers.layers.at(i).enabled))
+                    result = Return::Visibility;
+
+                if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows))
+                    lastHoveredLayer = i;
+                if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
+                        (InputEvent::isButtonPressed(Mouse::Button::Left) || InputEvent::isTouchPressed(0)))
+                    lastClickedLayer = i;
+                if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
+                        (InputEvent::isButtonReleased(Mouse::Button::Left) || InputEvent::isTouchReleased(0)))
+                    layers.layerIDSelected = i;
+                if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
+                || InputEvent::isButtonReleased(Mouse::Button::Right)))
+                    popUpState.push_back(PopUpState::LayerProperties);
             }
-            if (ImGui::BeginItemTooltip())
-            {
-                ImGui::Text("%s", LL::ind("layerToolTip[]", i).c_str());
-                ImGui::EndTooltip();
-            }
-            ImGui::EndDisabled();
-            ImGui::PopStyleColor(3);
-            ImGui::SameLine();
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
         }
-        ImGui::PopStyleVar(2);
     }
+    ImGui::EndChild();
+    const uint8_t count = 7;
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, Vector2f(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, Vector2f((ImGui::GetContentRegionAvail().x - 25 * GUIScale) / (count - 1) - 25 * GUIScale, 0));
+    const array toolColors = {
+        Color(83, 170, 17), Color(170, 17, 36), Color(170, 163, 17),
+        Color(17, 170, 87), Color(17, 170, 138), Color(17, 65, 170),
+        Color(170, 75, 17),
+    };
+    for (uint8_t i = 0; i < count; i++)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Button, Color(toolColors.at(i).r, toolColors.at(i).g, toolColors.at(i).b, 128));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Color(toolColors.at(i).r, toolColors.at(i).g, toolColors.at(i).b, 192));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color(toolColors.at(i).r, toolColors.at(i).g, toolColors.at(i).b, 255));
+
+        const int16_t layerCount = editorID == -1 ? 0 : imageLayers.at(editorID).layers.size();
+        const LayerID layerSelected = editorID == -1 ? 0 : imageLayers.at(editorID).layerIDSelected;
+
+        ImGui::BeginDisabled(editorID == -1 ||
+            (i == 0 && layerCount == c_maxLayers) ||
+            (i == 1 && layerCount == 1 ||
+            i == 3 && layerSelected >= layerCount - 1 ||
+            (i == 4 || i == 5) && layerSelected <= 0));
+        if (ImGui::ImageButton(("LayerButton" + to_string(i)).c_str(), layerIcons.getNativeHandle(), Vector2f(25, 25) * GUIScale,
+            Vector2f(1.f / count * i, 0), Vector2f(1.f / count * (i + 1), 1)))
+        {
+            switch (i)
+            {
+            case 0: result = Return::AddLayer; break;
+            case 1: result = Return::DeleteLayer; break;
+            case 2: result = Return::DuplicateLayer; break;
+            case 3: result = Return::MoveLayerUp; break;
+            case 4: result = Return::MoveLayerDown; break;
+            case 5: result = Return::MergeLayerDown; break;
+            case 6: popUpState.push_back(PopUpState::LayerProperties); break;
+            default: break;
+            }
+        }
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::Text("%s", LL::ind("layerToolTip[]", i).c_str());
+            ImGui::EndTooltip();
+        }
+        ImGui::EndDisabled();
+        ImGui::PopStyleColor(3);
+        ImGui::SameLine();
+    }
+    ImGui::PopStyleVar(2);
     ImGui::End();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();

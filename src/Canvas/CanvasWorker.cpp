@@ -83,10 +83,10 @@ void glxy::CanvasWorker::AddWork(const CanvasWork& work, const EditorID editorID
     get().newWorkCV.notify_one();
 }
 
-void glxy::CanvasWorker::AddEditor()
+void glxy::CanvasWorker::AddEditor(const bool infinite)
 {
     lock_guard lock(get().mtxEditor);
-    get().imageEditorWorker.emplace_back(std::make_shared<ImageEditorWorker>());
+    get().imageEditorWorker.emplace_back(std::make_shared<ImageEditorWorker>(infinite));
 }
 
 void glxy::CanvasWorker::RemoveEditor(const EditorID editorID)
@@ -102,6 +102,7 @@ void glxy::CanvasWorker::Setup()
 
 void glxy::CanvasWorker::Main()
 {
+    Context context;
     CanvasExtendedWork work;
     bool sameWork = false;
     while (true)
@@ -120,9 +121,12 @@ void glxy::CanvasWorker::Main()
                     workTodo.front().get<CanvasWork::BucketFill>() && workTodo.at(1).get<CanvasWork::BucketFill>() ||
                     workTodo.front().get<CanvasWork::WandFill>() && workTodo.at(1).get<CanvasWork::WandFill>() ||
                     workTodo.front().get<CanvasWork::GradientPixels>() && workTodo.at(1).get<CanvasWork::GradientPixels>() ||
+                    workTodo.front().get<CanvasWork::ShapePixels>() && workTodo.at(1).get<CanvasWork::ShapePixels>() ||
+                    workTodo.front().get<CanvasWork::TextPixels>() && workTodo.at(1).get<CanvasWork::TextPixels>() ||
                     workTodo.front().get<CanvasWork::BeginSelect>() && workTodo.at(1).get<CanvasWork::BeginSelect>() ||
                     workTodo.front().get<CanvasWork::EndSelect>() && workTodo.at(1).get<CanvasWork::EndSelect>() ||
                     workTodo.front().get<CanvasWork::MovePixels>() && workTodo.at(1).get<CanvasWork::MovePixels>() ||
+                    workTodo.front().get<CanvasWork::MoveSelection>() && workTodo.at(1).get<CanvasWork::MoveSelection>() ||
                     workTodo.front().get<CanvasWork::TransformImage>() && workTodo.at(1).get<CanvasWork::TransformImage>())
                 {
                     workTodo.erase(workTodo.begin());
@@ -131,7 +135,8 @@ void glxy::CanvasWorker::Main()
                 }
                 if (workTodo.size() > 5 &&
                     (workTodo.front().get<CanvasWork::BrushPixels>() && workTodo.at(1).get<CanvasWork::BrushPixels>() ||
-                    workTodo.front().get<CanvasWork::EraserPixels>() && workTodo.at(1).get<CanvasWork::EraserPixels>()))
+                    workTodo.front().get<CanvasWork::EraserPixels>() && workTodo.at(1).get<CanvasWork::EraserPixels>()) ||
+                    workTodo.front().get<CanvasWork::ColorSwapPixels>() && workTodo.at(1).get<CanvasWork::ColorSwapPixels>())
                 {
                     const array<int8_t, 3> delCount = { 5, 10, 15 };
                     int8_t i = 0;
@@ -153,6 +158,14 @@ void glxy::CanvasWorker::Main()
                         {
                             const auto* src = workTodo.front().get<CanvasWork::EraserPixels>();
                             auto* dst = workTodo.at(1).modify<CanvasWork::EraserPixels>();
+                            if (!src || !dst)
+                                break;
+                            dst->end = src->end;
+                        }
+                        else if (workTodo.front().get<CanvasWork::ColorSwapPixels>())
+                        {
+                            const auto* src = workTodo.front().get<CanvasWork::ColorSwapPixels>();
+                            auto* dst = workTodo.at(1).modify<CanvasWork::ColorSwapPixels>();
                             if (!src || !dst)
                                 break;
                             dst->end = src->end;
@@ -200,8 +213,7 @@ void glxy::CanvasWorker::Main()
             if (work.get<CanvasWork::ExitThread>())
                 break;
 
-            auto& ie = imageEditorWorker.at(work.getEditorID());
-            RenderWorker::setEditorID(work.getEditorID());
+            const auto& ie = imageEditorWorker.at(work.getEditorID());
 
             if (const auto v = work.get<CanvasWork::CreateLayer>())
                 ie->OptionCreateLayer(v->layerID);
@@ -242,15 +254,15 @@ void glxy::CanvasWorker::Main()
             else if (const auto v = work.get<CanvasWork::ImageOpen>())
                 ie->Open(v->path);
             else if (const auto v = work.get<CanvasWork::ClipboardCopy>())
-                ie->OptionCopyToClipboard(*v->image, *v->location, v->layerID);
+                ie->OptionCopyToClipboard(*v->image, *v->location, *v->selection, v->layerID);
             else if (const auto v = work.get<CanvasWork::ClipboardPaste>())
             {
                 ie->workingLayer = v->layerID;
-                ie->OptionPasteFromClipboard(*v->image, *v->location);
+                ie->OptionPasteFromClipboard(*v->image, *v->location, *v->selection);
                 ie->MovePixels(v->transform);
             }
-            else if (work.get<CanvasWork::SelectAll>())
-                ie->OptionSelectAll();
+            else if (const auto v = work.get<CanvasWork::SelectArea>())
+                ie->OptionSelectArea(v->area);
             else if (work.get<CanvasWork::DeselectAll>())
                 ie->OptionDeselectAll();
             else if (const auto v = work.get<CanvasWork::DeleteSelected>())
@@ -264,19 +276,27 @@ void glxy::CanvasWorker::Main()
             }
             else if (const auto v = work.get<CanvasWork::Adjustment>())
             {
-                ie->Adjustment(v->adjustment, v->layerID, v->data.get(), work.chunkID);
+                ie->Adjustment(v->adjustment, v->layerID, v->data.get(),
+                    Vector2i(work.chunkID % ie->chunkManager.getChunkCount().x,
+                        work.chunkID / ie->chunkManager.getChunkCount().x));
+
+                //assume finite canvas
                 work.chunkID++;
-                if (work.chunkID < ie->chunkManager.getChunkCount().x * ie->chunkManager.getChunkCount().y)
+                if (work.chunkID < ie->chunkManager.getChunkCountTotal())
                     sameWork = true;
-                workDone = static_cast<float>(work.chunkID) / (ie->chunkManager.getChunkCount().x * ie->chunkManager.getChunkCount().y);
+                workDone = static_cast<float>(work.chunkID) / (ie->chunkManager.getChunkCountTotal());
             }
             else if (const auto v = work.get<CanvasWork::Effect>())
             {
-                ie->Effect(v->effect, v->layerID, v->data.get(), work.chunkID);
+                ie->Effect(v->effect, v->layerID, v->data.get(),
+                    Vector2i(work.chunkID % ie->chunkManager.getChunkCount().x,
+                        work.chunkID / ie->chunkManager.getChunkCount().x));
+
+                //assume finite canvas
                 work.chunkID++;
-                if (work.chunkID < ie->chunkManager.getChunkCount().x * ie->chunkManager.getChunkCount().y)
+                if (work.chunkID < ie->chunkManager.getChunkCountTotal())
                     sameWork = true;
-                workDone = static_cast<float>(work.chunkID) / (ie->chunkManager.getChunkCount().x * ie->chunkManager.getChunkCount().y);
+                workDone = static_cast<float>(work.chunkID) / (ie->chunkManager.getChunkCountTotal());
             }
             else if (work.get<CanvasWork::CancelAdjustmentOrEffect>())
                 ie->CancelAdjustmentOrEffect();
@@ -288,10 +308,10 @@ void glxy::CanvasWorker::Main()
                 ie->ResizeCanvas(v->size, v->pivot);
             else if (const auto v = work.get<CanvasWork::TransformImage>())
                 ie->OptionTransformImage(v->pos, v->rot, v->scale, v->origin, v->tile);
-            else if (const auto v = work.get<CanvasWork::DrawPixels>())
+            else if (const auto v = work.get<CanvasWork::PencilPixels>())
             {
                 ie->workingLayer = v->layerID;
-                ie->DrawPixels(v->start, v->end, v->color, v->layerID);
+                ie->PencilPixels(v->start, v->end, v->color, v->layerID);
             }
             else if (const auto v = work.get<CanvasWork::BrushPixels>())
             {
@@ -303,6 +323,11 @@ void glxy::CanvasWorker::Main()
                 ie->workingLayer = v->layerID;
                 ie->BrushPixels(v->start, v->end, v->radius, Color::Transparent, v->layerID, true);
             }
+            else if (const auto v = work.get<CanvasWork::ColorSwapPixels>())
+            {
+                ie->workingLayer = v->layerID;
+                ie->ColorSwapPixels(v->start, v->end, v->radius, v->color1, v->color2, v->tol, v->layerID);
+            }
             else if (const auto v = work.get<CanvasWork::GradientPixels>())
             {
                 ie->workingLayer = v->layerID;
@@ -311,7 +336,7 @@ void glxy::CanvasWorker::Main()
             else if (const auto v = work.get<CanvasWork::BeginSelect>())
                 ie->BeginSelect(v->pos, v->selectMode, v->type, v->keepAspect);
             else if (const auto v = work.get<CanvasWork::EndSelect>())
-                ie->EndSelect(v->pos);
+                ie->EndSelect(v->pos, v->type);
             else if (const auto v = work.get<CanvasWork::BucketFill>())
             {
                 {
@@ -350,6 +375,25 @@ void glxy::CanvasWorker::Main()
             else if (const auto v = work.get<CanvasWork::MovePixels>())
             {
                 ie->mtxEditorWorkerCommon.lock();
+                const bool moveSelected = ie->moveSelected;
+                ie->mtxEditorWorkerCommon.unlock();
+                ie->workingLayer = v->layerID;
+
+                if (!moveSelected)
+                {
+                    assert(!ie->chunkManager.getFinalSelectionBounds().expired());
+                    const IntRect bounds = *ie->chunkManager.getFinalSelectionBounds().lock();
+                    ie->SetupMovePixels();
+                    lock_guard lock(ie->mtxEditorWorkerCommon);
+                    ie->newMoveSelectArea = bounds;
+                    ie->moveSelected = true;
+                }
+                Transform transform(v->transform);
+                ie->MovePixels(transform.scale(v->scale));
+            }
+            else if (const auto v = work.get<CanvasWork::MoveSelection>())
+            {
+                ie->mtxEditorWorkerCommon.lock();
                 const bool moveSelection = ie->moveSelection;
                 ie->mtxEditorWorkerCommon.unlock();
                 ie->workingLayer = v->layerID;
@@ -358,13 +402,32 @@ void glxy::CanvasWorker::Main()
                 {
                     assert(!ie->chunkManager.getFinalSelectionBounds().expired());
                     const IntRect bounds = *ie->chunkManager.getFinalSelectionBounds().lock();
-                    ie->SetupMovePixels();
+                    ie->SetupMoveSelection();
                     lock_guard lock(ie->mtxEditorWorkerCommon);
-                    ie->newMoveSelectionArea = bounds;
+                    ie->newMoveSelectArea = bounds;
                     ie->moveSelection = true;
                 }
+                Transform transform(v->transform);
+                ie->MoveSelection(transform.scale(v->scale));
+            }
+            else if (const auto v = work.get<CanvasWork::ShapePixels>())
+            {
+                {
+                    lock_guard lock(ie->mtxEditorWorkerCommon);
+                    ie->shapeDraw = true;
+                }
+                ie->workingLayer = v->layerID;
+                ie->ShapePixels(v->shape, v->layerID);
 
-                ie->MovePixels(v->transform);
+            }
+            else if (const auto v = work.get<CanvasWork::TextPixels>())
+            {
+                {
+                    lock_guard lock(ie->mtxEditorWorkerCommon);
+                    ie->textDraw = true;
+                }
+                ie->workingLayer = v->layerID;
+                ie->TextPixels(v->text, v->globalBounds, v->layerID);
             }
         }
 

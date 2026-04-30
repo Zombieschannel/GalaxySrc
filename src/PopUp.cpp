@@ -1,17 +1,18 @@
 #include "App.hpp"
-#include "Func.hpp"
+#include "ImGuiFunc.hpp"
 #include "Global.hpp"
 #include "ZEditorsCommon/Shortcuts.hpp"
 #include "ZEditorsCommon/Themes.hpp"
 #include "ZEditorsCommon/Languages.hpp"
 #include <SFML/OpenGL.hpp>
 
-#define BUILDNUMBER 3022
+#define BUILDNUMBER 3811
 void glxy::App::PopUp()
 {
     if (popUpState.empty())
         return;
     static bool keyboardFocusHere = false;
+    static bool setWindowFocus = false;
     static Vector2i imageNewSize;
     static int32_t scalePercentage;
     static Pivot canvasResizePivot;
@@ -25,16 +26,19 @@ void glxy::App::PopUp()
     static float workerTodoWork = 0;
     static unique_ptr<AdjustmentData> adjustmentData;
     static unique_ptr<EffectData> effectData;
+    static vector<pair<int32_t, int32_t>> searchItems;
+    static int8_t searchCount = 7;
+    static int32_t searchTargetID = 0;
     bool reRender = false;
     bool popStyle = false;
-    const array popUpSize = {
+    constexpr array popUpSize = {
         Vector2f(550, 450), //Settings
         Vector2f(630, 360), //About
         Vector2f(690, 540), //Changelog
         Vector2f(690, 540), //FuturePlan
         Vector2f(440, 100), //ThreadWork
         Vector2f(530, 350), //GLScan
-        Vector2f(440, 240), //New
+        Vector2f(440, 300), //New
         Vector2f(500, 200), //Save
         Vector2f(550, 400), //Open
         Vector2f(500, 200), //LayerProperties
@@ -46,6 +50,75 @@ void glxy::App::PopUp()
         Vector2f(300, 130), //SaveBeforeClose
         Vector2f(400, 200), //Adjustment
         Vector2f(400, 200), //Effect
+        Vector2f(0, 0),     //ToolChanged
+        Vector2f(300, 110), //GridBold
+        Vector2f(400, 370), //Search
+    };
+    struct SearchEntry
+    {
+        string name;
+        void (App::*callback)();
+        CanvasType type;
+    };
+    const array searchOptions = {
+        SearchEntry{"fileMenu[0]"_S, &App::MenuNew, CanvasType::FixedOrInfinite},
+        SearchEntry{"fileMenu[1]"_S, &App::MenuOpen, CanvasType::FixedOrInfinite},
+        SearchEntry{"fileMenu[2]"_S, &App::MenuSave, CanvasType::Fixed},
+        SearchEntry{"fileMenu[3]"_S, &App::MenuSaveAs, CanvasType::Fixed},
+        SearchEntry{"editMenu[0]"_S, &App::MenuCopy, CanvasType::Fixed},
+        SearchEntry{"editMenu[1]"_S, &App::MenuCut, CanvasType::Fixed},
+        SearchEntry{"editMenu[2]"_S, &App::MenuPaste, CanvasType::Fixed},
+        SearchEntry{"editMenu[4]"_S, &App::MenuDeselectAll, CanvasType::Fixed},
+        SearchEntry{"editMenu[5]"_S, &App::MenuDelete, CanvasType::Fixed},
+        SearchEntry{"viewMenu[0]"_S, &App::MenuZoomIn, CanvasType::FixedOrInfinite},
+        SearchEntry{"viewMenu[1]"_S, &App::MenuZoomOut, CanvasType::FixedOrInfinite},
+        SearchEntry{"viewMenu[4]"_S, &App::MenuGrid, CanvasType::FixedOrInfinite},
+        SearchEntry{"viewMenu[5]"_S, &App::MenuGridBold, CanvasType::FixedOrInfinite},
+        SearchEntry{"viewMenu[6]"_S, &App::MenuRuler, CanvasType::FixedOrInfinite},
+        SearchEntry{"viewMenu[7]"_S, &App::MenuActualSize, CanvasType::FixedOrInfinite},
+        SearchEntry{"viewMenu[8]"_S, &App::MenuSyncViewport, CanvasType::FixedOrInfinite},
+        SearchEntry{"imageMenu[0]"_S, &App::MenuCrop, CanvasType::Fixed},
+        SearchEntry{"imageMenu[1]"_S, &App::MenuResize, CanvasType::Fixed},
+        SearchEntry{"imageMenu[2]"_S, &App::MenuResizeCanvas, CanvasType::Fixed},
+        SearchEntry{"imageMenu[3]"_S, &App::MenuFlipImageHorizontal, CanvasType::Fixed},
+        SearchEntry{"imageMenu[4]"_S, &App::MenuFlipImageVertical, CanvasType::Fixed},
+        SearchEntry{"imageMenu[5]"_S, &App::MenuRotate90CW, CanvasType::Fixed},
+        SearchEntry{"imageMenu[6]"_S, &App::MenuRotate90CCW, CanvasType::Fixed},
+        SearchEntry{"imageMenu[7]"_S, &App::MenuRotate180, CanvasType::Fixed},
+        SearchEntry{"imageMenu[8]"_S, &App::MenuTransformImage, CanvasType::Fixed},
+        SearchEntry{"layerMenu[0]"_S, &App::MenuNewLayer, CanvasType::FixedOrInfinite},
+        SearchEntry{"layerMenu[1]"_S, &App::MenuDeleteLayer, CanvasType::FixedOrInfinite},
+        SearchEntry{"layerMenu[2]"_S, &App::MenuDuplicateLayer, CanvasType::FixedOrInfinite},
+        SearchEntry{"layerMenu[3]"_S, &App::MenuMoveLayerUp, CanvasType::FixedOrInfinite},
+        SearchEntry{"layerMenu[4]"_S, &App::MenuMoveLayerDown, CanvasType::FixedOrInfinite},
+        SearchEntry{"layerMenu[5]"_S, &App::MenuMergeLayerDown, CanvasType::FixedOrInfinite},
+        SearchEntry{"layerMenu[6]"_S, &App::MenuFlipLayerHorizontal, CanvasType::Fixed},
+        SearchEntry{"layerMenu[7]"_S, &App::MenuFlipLayerVertical, CanvasType::Fixed},
+        SearchEntry{"layerMenu[8]"_S, &App::MenuLayerProperties, CanvasType::FixedOrInfinite},
+        SearchEntry{"adjustMenu[0]"_S, &App::MenuAdjustBlackAndWhite, CanvasType::Fixed},
+        SearchEntry{"adjustMenu[1]"_S, &App::MenuAdjustBrightnessContrast, CanvasType::Fixed},
+        SearchEntry{"adjustMenu[2]"_S, &App::MenuAdjustHSV, CanvasType::Fixed},
+        SearchEntry{"adjustMenu[3]"_S, &App::MenuAdjustInvert, CanvasType::Fixed},
+        SearchEntry{"adjustMenu[4]"_S, &App::MenuAdjustTint, CanvasType::Fixed},
+        SearchEntry{"effectMenu[0]"_S, &App::MenuEffectGauss, CanvasType::Fixed},
+        SearchEntry{"effectMenu[1]"_S, &App::MenuEffectBox, CanvasType::Fixed},
+        SearchEntry{"effectMenu[2]"_S, &App::MenuEffectDirectional, CanvasType::Fixed},
+        SearchEntry{"effectMenu[3]"_S, &App::MenuEffectWhite, CanvasType::Fixed},
+        SearchEntry{"effectMenu[4]"_S, &App::MenuEffectFractal, CanvasType::Fixed},
+        SearchEntry{"otherMenu[0]"_S, &App::MenuChangelog, CanvasType::FixedOrInfinite},
+        SearchEntry{"otherMenu[1]"_S, &App::MenuFuturePlan, CanvasType::FixedOrInfinite},
+        SearchEntry{"otherMenu[2]"_S, &App::MenuGLScan, CanvasType::FixedOrInfinite},
+        SearchEntry{"otherMenu[3]"_S, &App::MenuDebug, CanvasType::FixedOrInfinite},
+        SearchEntry{"otherMenu[4]"_S, &App::MenuAbout, CanvasType::FixedOrInfinite},
+        SearchEntry{"selectSubmenu[0]"_S, &App::MenuSelectAll, CanvasType::Fixed},
+        SearchEntry{"selectSubmenu[1]"_S, &App::MenuSelectLeft, CanvasType::Fixed},
+        SearchEntry{"selectSubmenu[2]"_S, &App::MenuSelectRight, CanvasType::Fixed},
+        SearchEntry{"selectSubmenu[3]"_S, &App::MenuSelectTop, CanvasType::Fixed},
+        SearchEntry{"selectSubmenu[4]"_S, &App::MenuSelectBottom, CanvasType::Fixed},
+        SearchEntry{"selectSubmenu[5]"_S, &App::MenuSelectTopLeft, CanvasType::Fixed},
+        SearchEntry{"selectSubmenu[6]"_S, &App::MenuSelectTopRight, CanvasType::Fixed},
+        SearchEntry{"selectSubmenu[7]"_S, &App::MenuSelectBottomLeft, CanvasType::Fixed},
+        SearchEntry{"selectSubmenu[8]"_S, &App::MenuSelectBottomRight, CanvasType::Fixed},
     };
     if (resetPopupWindow)
     {
@@ -61,27 +134,35 @@ void glxy::App::PopUp()
     {
         switch (popUpState.back())
         {
+        case PopUpState::Search:
+            keyboardFocusHere = true;
+            break;
         case PopUpState::ThreadWork:
             workerTodoWork = CanvasWorker::getWorkAmount();
             break;
         case PopUpState::Effect:
             reRender = true;
-            maxOctaves = log2((_imageEditor.at(activeImageEditor)->getSize().x + _imageEditor.at(activeImageEditor)->getSize().y) / 2.f) + 1;
+            setWindowFocus = true;
+            maxOctaves = min(log2((_imageEditor.at(activeImageEditor)->getSize().x + _imageEditor.at(activeImageEditor)->getSize().y) / 2.f) + 1, 15.f);
             effSettings.fractalOctaves = maxOctaves;
             AddWork(CanvasWork::Finish{});
             break;
         case PopUpState::Adjustment:
             reRender = true;
+            setWindowFocus = true;
             AddWork(CanvasWork::Finish{});
             break;
         case PopUpState::TransformImage:
             reRender = true;
+            setWindowFocus = true;
             break;
         case PopUpState::Resize:
+            setWindowFocus = true;
             imageNewSize = Vector2i(_imageEditor.at(activeImageEditor)->getSize());
             scalePercentage = 100;
             break;
         case PopUpState::ResizeCanvas:
+            setWindowFocus = true;
             imageNewSize = Vector2i(_imageEditor.at(activeImageEditor)->getSize());
             scalePercentage = 100;
             canvasResizePivot = Pivot::Center;
@@ -94,6 +175,10 @@ void glxy::App::PopUp()
             break;
         case PopUpState::Open:
             keyboardFocusHere = true;
+            setWindowFocus = true;
+            break;
+        case PopUpState::Settings: case PopUpState::Save: case PopUpState::LayerProperties: case PopUpState::GridBold:
+            setWindowFocus = true;
             break;
         default: break;
         }
@@ -115,9 +200,156 @@ void glxy::App::PopUp()
     {
         switch (popUpState.back())
         {
+        case PopUpState::Search:
+        {
+            static string targetName;
+            bool first = false;
+            bool isInfinite = _imageEditor.at(activeImageEditor)->isInfinite;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            if (keyboardFocusHere)
+            {
+                ImGui::SetKeyboardFocusHere();
+                first = true;
+                keyboardFocusHere = false;
+            }
+            if (ImGui::InputText("##Target", &targetName[0], targetName.size() + 1, ImGuiInputTextFlags_CallbackResize | ImGuiInputTextFlags_AutoSelectAll, TextCallback, &targetName) || first)
+            {
+                searchItems.clear();
+                auto filter = [&](const string& name)
+                {
+                    if (name == "editMenu[0]"_S || name == "editMenu[1]"_S || name == "editMenu[4]"_S || name == "editMenu[5]"_S ||
+                        name == "imageMenu[0]"_S)
+                        return _imageEditor.at(activeImageEditor)->chunkManager.anyHasSelectionLayer();
+                    if (name == "editMenu[2]"_S)
+                        return clipboardImage != nullptr;
+                    if (name == "layerMenu[1]"_S)
+                        return _imageEditor.at(activeImageEditor)->chunkManager.getLayerCount() > 1;
+                    if (name == "layerMenu[3]"_S)
+                        return _layerPicker.getLayerIDSelected(activeImageEditor) < _imageEditor.at(activeImageEditor)->chunkManager.getLayerCount() - 1;
+                    if (name == "layerMenu[4]"_S || name == "layerMenu[5]"_S)
+                        return _layerPicker.getLayerIDSelected(activeImageEditor) > 0;
+                    return true;
+                };
+                if (!targetName.empty())
+                {
+                    if (!first)
+                        searchTargetID = 0;
+                    auto toLower = [](string data)
+                    {
+                        std::transform(data.begin(), data.end(), data.begin(), [](unsigned char c){ return tolower(c); });
+                        return data;
+                    };
+                    for (int8_t i = 0; i < searchOptions.size(); i++)
+                    {
+                        if (isInfinite && searchOptions.at(i).type == CanvasType::Fixed ||
+                            !isInfinite && searchOptions.at(i).type == CanvasType::Infinite)
+                            continue;
+                        if (!filter(searchOptions.at(i).name))
+                            continue;
+                        string comp = toLower(searchOptions.at(i).name);
+                        string targetLower = toLower(targetName);
+                        int32_t t = comp.find(targetLower);
+                        if (t == string::npos)
+                        {
+                            t = 50;
+                            while (!targetLower.empty())
+                            {
+                                int32_t tm = comp.find(targetLower.front());
+                                if (tm != string::npos)
+                                {
+                                    if (t > 0)
+                                        t--;
+                                    comp.erase(tm, 1);
+                                }
+                                targetLower.erase(0, 1);
+                            }
+                        }
+                        searchItems.emplace_back(pair(t, i));
+                    }
+                    std::sort(searchItems.begin(), searchItems.end(), std::less());
+                }
+                else
+                {
+                    for (int8_t i = 0; i < searchOptions.size(); i++)
+                    {
+                        if (isInfinite && searchOptions.at(i).type == CanvasType::Fixed ||
+                            !isInfinite && searchOptions.at(i).type == CanvasType::Infinite)
+                            continue;
+                        if (!filter(searchOptions.at(i).name))
+                            continue;
+                        searchItems.emplace_back(pair(0, i));
+                    }
+                }
+            }
+            bool selected = false;
+            if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
+            {
+                searchCount = floor(ImGui::GetContentRegionAvail().y / ((15.f + ImGui::GetStyle().ItemSpacing.y) * settings.GUIScale));
+                for (int8_t i = 0; i < searchCount && i < searchItems.size(); i++)
+                {
+                    if (ImGui::Selectable((searchOptions.at(searchItems.at(i).second).name +
+                        "##search" + to_string(i)).c_str(), false,
+                        searchTargetID == i ? ImGuiSelectableFlags_Highlight : ImGuiSelectableFlags_None, Vector2f(0, 15 * settings.GUIScale)))
+                    {
+                        searchTargetID = i;
+                        selected = true;
+                    }
+                }
+                ImGui::EndChild();
+            }
+            if (InputEvent::isKeyHeld(Keyboard::Key::Up))
+            {
+                searchTargetID--;
+                if (searchTargetID < 0)
+                    searchTargetID = searchCount - 1;
+            }
+            if (InputEvent::isKeyHeld(Keyboard::Key::Down))
+            {
+                searchTargetID++;
+                searchTargetID %= searchCount;
+            }
+            if (selected || InputEvent::isKeyHeld(Keyboard::Key::Enter))
+            {
+                popUpState.pop_back();
+                (this->*searchOptions.at(searchItems.at(searchTargetID).second).callback)();
+            }
+            if (ImGui::Button("Cancel"_C, Vector2f(ImGui::GetContentRegionAvail().x, 0)) || InputEvent::isKeyHeld(Keyboard::Key::Escape) && !GLOBAL.wantInput)
+            {
+                popUpState.pop_back();
+            }
+            break;
+        }
+        case PopUpState::GridBold:
+            if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
+            {
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
+                ImGui::InputInt2("Grid bold size"_C, &settings.gridBold.x);
+                if (ImGui::IsItemDeactivatedAfterEdit())
+                {
+                    if (settings.gridBold.y < 0)
+                        settings.gridBold.x = 0;
+                    if (settings.gridBold.y < 0)
+                        settings.gridBold.y = 0;
+                    for (auto& n : _imageEditor)
+                        n->OptionGridBold(settings.gridBold);
+                }
+            }
+            ImGui::EndChild();
+            if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+                popUpState.pop_back();
+            break;
         case PopUpState::Effect:
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
                 switch (targetEffect)
                 {
                 case Effects::GaussianBlur:
@@ -166,7 +398,7 @@ void glxy::App::PopUp()
                 case Effects::FractalNoise:
                     if (ImGui::SliderInt("Octaves"_C, &effSettings.fractalOctaves, 1, maxOctaves, "%d", ImGuiSliderFlags_AlwaysClamp))
                         reRender = true;
-                    if (ImGui::SliderFloat("Smoothness"_C, &effSettings.fractalSmoothness, 0.001f, 2, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                    if (ImGui::SliderFloat("Smoothness"_C, &effSettings.fractalSmoothness, 0.01f, 2, "%.2f", ImGuiSliderFlags_AlwaysClamp))
                         reRender = true;
                     if (ImGui::InputInt("Seed"_C, &effSettings.fractalSeed))
                         reRender = true;
@@ -208,6 +440,11 @@ void glxy::App::PopUp()
         case PopUpState::Adjustment:
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
                 switch (targetAdjustment)
                 {
                 case Adjustments::BlackAndWhite: case Adjustments::Invert:
@@ -225,14 +462,14 @@ void glxy::App::PopUp()
                         adjustmentData = make_unique<AdjustBrightnessContrast>(adjSettings.brightness, adjSettings.contrast);
                     break;
                 case Adjustments::HSV:
-                    if (ImGui::SliderFloat("Hue"_C, &adjSettings.hue, 0, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+                    if (ImGui::SliderFloat("Hue"_C, &adjSettings.hue, 0, 360, "%.3f", ImGuiSliderFlags_AlwaysClamp))
                         reRender = true;
                     if (ImGui::SliderFloat("Saturation"_C, &adjSettings.saturation, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
                         reRender = true;
                     if (ImGui::SliderFloat("Value"_C, &adjSettings.value, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
                         reRender = true;
                     if (reRender)
-                        adjustmentData = make_unique<AdjustHSV>(adjSettings.hue, adjSettings.saturation, adjSettings.value);
+                        adjustmentData = make_unique<AdjustHSV>(fmodf(adjSettings.hue, 360.f), adjSettings.saturation, adjSettings.value);
                     break;
                 case Adjustments::Tint:
                     if (ImGui::SliderFloat("Red"_C, &adjSettings.tintRed, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
@@ -317,6 +554,11 @@ void glxy::App::PopUp()
         case PopUpState::TransformImage:
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
                 if (ImGui::SliderFloat2("Origin"_C, &transformImageOrigin.x, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
                     reRender = true;
                 if (ImGui::SliderFloat2("Position"_C, &transformImagePosition.x, -1, 1, "%.3f", ImGuiSliderFlags_AlwaysClamp))
@@ -325,7 +567,7 @@ void glxy::App::PopUp()
                     reRender = true;
                 if (ImGui::SliderFloat2("Scale"_C, &transformImageScale.x, 0.001f, 1000, "%.3f", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic))
                     reRender = true;
-                ImGui::BeginDisabled(_imageEditor.at(activeImageEditor)->chunkManager.hasSelectionLayer(0));
+                ImGui::BeginDisabled(_imageEditor.at(activeImageEditor)->chunkManager.anyHasSelectionLayer());
                 if (ImGui::Checkbox("Tileable"_C, &transformImageTile))
                     reRender = true;
                 ImGui::EndDisabled();
@@ -353,6 +595,11 @@ void glxy::App::PopUp()
             static bool byPercentage = false;
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
                 ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
                 if (ImGui::BeginCombo("Resampling method"_C, LL::ind("resamplingMethod[]", settings.resamplingMethod).c_str()))
                 {
@@ -422,6 +669,11 @@ void glxy::App::PopUp()
             static bool byPercentage = false;
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
                 ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
                 if (ImGui::RadioButton("By percentage"_C, byPercentage))
                     byPercentage = true;
@@ -506,6 +758,11 @@ void glxy::App::PopUp()
         {
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
                 const LayerID layerID = _layerPicker.getLayerIDSelected(activeImageEditor);
                 const auto& layer = _layerPicker.getLayer(activeImageEditor, layerID);
                 string data = layer.name;
@@ -552,9 +809,9 @@ void glxy::App::PopUp()
                 ImGui::SetKeyboardFocusHere();
                 keyboardFocusHere = false;
             }
-            ImGui::InputText("Filename"_C, &fileName[0], fileName.size() + 1, ImGuiInputTextFlags_CallbackResize | ImGuiInputTextFlags_AlwaysOverwrite, TextCallback, &fileName);
+            ImGui::InputText("Filename"_C, &fileName[0], fileName.length() + 1, ImGuiInputTextFlags_CallbackResize | ImGuiInputTextFlags_AlwaysOverwrite, TextCallback, &fileName);
             ImGui::SeparatorText("Recent"_C);
-            if (ImGui::BeginChild("Scrolling", Vector2f(0, -30 * settings.GUIScale)))
+            if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
                 if (settings.recentFiles.empty())
                     ImGui::Text("%s...", "Nothing here"_C);
@@ -588,18 +845,23 @@ void glxy::App::PopUp()
             static bool exists = false;
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
                 if (ImGui::InputText("Filename"_C, &fileName[0], fileName.size() + 1, ImGuiInputTextFlags_CallbackResize | ImGuiInputTextFlags_EnterReturnsTrue, TextCallback, &fileName))
                 {
-                    exists = filesystem::exists(fileName + c_imageExtensions.at(extension));
+                    exists = filesystem::exists(fileName + c_imageExtensions.at(extension).data());
                 }
-                if (ImGui::BeginCombo("Extension"_C, c_imageExtensions.at(extension).c_str()))
+                if (ImGui::BeginCombo("Extension"_C, c_imageExtensions.at(extension).data()))
                 {
                     for (int32_t i = 0; i < c_imageExtensions.size(); i++)
                     {
-                        if (ImGui::Selectable(c_imageExtensions.at(i).c_str()))
+                        if (ImGui::Selectable(c_imageExtensions.at(i).data()))
                         {
                             extension = i;
-                            exists = filesystem::exists(fileName + c_imageExtensions.at(extension));
+                            exists = filesystem::exists(fileName + c_imageExtensions.at(extension).data());
                         }
                     }
                     ImGui::EndCombo();
@@ -615,7 +877,7 @@ void glxy::App::PopUp()
             if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
             {
                 auto& ie = _imageEditor.at(activeImageEditor);
-                ie->imagePath = fileName + c_imageExtensions.at(extension);
+                ie->imagePath = fileName + c_imageExtensions.at(extension).data();
                 ie->imageJPGQuality = jpgQuality;
                 ie->Save();
                 popUpState.pop_back();
@@ -632,6 +894,7 @@ void glxy::App::PopUp()
         case PopUpState::New:
         {
             static int32_t background = 0;
+            static int32_t imageType = 0;
             const array colors = {
                 Color::White,
                 Color::Black,
@@ -639,18 +902,35 @@ void glxy::App::PopUp()
             };
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
-                ImGui::SetWindowFocus();
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
+                ImGui::RadioButton("Fixed size"_C, &imageType, 0);
+                ImGui::BeginDisabled(imageType != 0);
+                ImGui::Indent();
                 ImGui::DragInt2("Resolution"_C, &resolution.x, 1, 1, 1e5, "%d", ImGuiSliderFlags_AlwaysClamp);
+                ImGui::Unindent();
+                ImGui::EndDisabled();
+                ImGui::RadioButton("Infinite"_C, &imageType, 1);
+                ImGui::Spacing();
                 ImGui::Spacing();
                 ImGui::Text("%s:", "Background"_C);
+                ImGui::Indent();
                 ImGui::RadioButton("White"_C, &background, 0);
                 ImGui::RadioButton("Black"_C, &background, 1);
+                ImGui::BeginDisabled(imageType != 0);
                 ImGui::RadioButton("Transparent"_C, &background, 2);
+                ImGui::EndDisabled();
+                ImGui::Unindent();
             }
             ImGui::EndChild();
             if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
             {
-                CreateEmptyImage(Vector2u(resolution), colors.at(background));
+                if (imageType == 1 && background == 2)
+                    background = 0;
+                CreateEmptyImage(Vector2u(resolution), imageType, colors.at(background));
                 popUpState.push_back(PopUpState::ThreadWork);
             }
             ImGui::SameLine();
@@ -671,7 +951,6 @@ void glxy::App::PopUp()
                 }
                 openWithGalaxyFile = "";
             }
-            ImGui::SetWindowFocus();
             const float width = ImGui::GetContentRegionAvail().x / 2 - ImGui::GetStyle().ChildBorderSize * 3 * 2;
             for (int8_t i = 0; i < 3; i++)
             {
@@ -818,16 +1097,28 @@ void glxy::App::PopUp()
             }
             ImGui::EndChild();
 
-            if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
+            if (ImGui::Button("OK", Vector2f(ImGui::GetContentRegionAvail().x / 2, ImGui::GetContentRegionAvail().y)) || InputEvent::isKeyHeld(Keyboard::Key::Enter) && !GLOBAL.wantInput)
             {
                 printData = 0;
                 popUpState.pop_back();
+            }
+            ImGui::SameLine();
+
+            if (ImGui::Button("Copy to clipboard"_C, Vector2f(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y)))
+            {
+                string sum;
+                for (int16_t i = 0; i < GLdata.size(); i++)
+                {
+                    sum += GLdata.at(i);
+                    sum += '\n';
+                }
+                Clipboard::setString(sum);
             }
         }
             break;
         case PopUpState::Changelog: case PopUpState::FuturePlan:
         {
-            const string& t = popUpState.back() == PopUpState::Changelog ? c_changelog : c_futurePlan;
+            const string_view& t = popUpState.back() == PopUpState::Changelog ? c_changelog : c_futurePlan;
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
                 string x;
@@ -868,6 +1159,11 @@ void glxy::App::PopUp()
             static int32_t fontSize = 16.f * settings.GUIScale;
             if (ImGui::BeginChild("Scroll", Vector2f(0, -30 * settings.GUIScale)))
             {
+                if (setWindowFocus)
+                {
+                    ImGui::SetWindowFocus();
+                    setWindowFocus = false;
+                }
                 ImGui::SeparatorText("Graphics"_C);
                 if (ImGui::BeginCombo("Resolution"_C, (to_string(settings.resolution.x) + "x" + to_string(settings.resolution.y)).c_str()))
                 {
@@ -969,10 +1265,10 @@ void glxy::App::PopUp()
                     resetPopupWindow = true;
                     changeFont = true;
                 }
-                if (ImGui::BeginCombo("Language"_C, c_languageNames.at(settings.languageID).c_str()))
+                if (ImGui::BeginCombo("Language"_C, c_languageNames.at(settings.languageID).data()))
                 {
                     for (uint8_t i = 0; i < c_languageCnt; i++)
-                        if (ImGui::Selectable(c_languageNames.at(i).c_str()))
+                        if (ImGui::Selectable(c_languageNames.at(i).data()))
                         {
                             settings.languageID = i;
                             LL::setLanguageID(settings.languageID);
@@ -986,6 +1282,11 @@ void glxy::App::PopUp()
                 ImGui::Checkbox("Draw inner selection lines"_C, &settings.drawSelectionLines);
                 ImGui::Checkbox("Show color picker in triangle style"_C, &settings.colorPickerTriangle);
                 ImGui::Checkbox("Enable touchpad support"_C, &settings.touchPadSupport);
+                if (ImGui::InputText("Font location"_C, &settings.fontLocation[0], settings.fontLocation.length() + 1,
+                    ImGuiInputTextFlags_CallbackResize | ImGuiInputTextFlags_EnterReturnsTrue, TextCallback, &settings.fontLocation))
+                {
+                    LoadFonts();
+                }
                 if (ImGui::BeginCombo("Pan mouse button"_C, LL::ind("panMouseButton[]", settings.panMouseButton).c_str()))
                 {
                     for (int8_t i = 0; i < 3; i++)
@@ -1063,9 +1364,9 @@ void glxy::App::PopUp()
 
                 ImGui::TextWrapped("%s", "glxyAbout6"_C);
                 ImGui::Spacing();
-                ImGui::TextWrapped("glxyAbout7"_C, c_AppVersion.c_str(), BUILDNUMBER, c_SFML_ARCH.c_str());
+                ImGui::TextWrapped("glxyAbout7"_C, c_AppVersion.c_str(), BUILDNUMBER, c_SFML_ARCH.data());
                 ImGui::Indent();
-                ImGui::TextWrapped("glxyAbout8"_C, SFML_VERSION_MAJOR, SFML_VERSION_MINOR, SFML_VERSION_PATCH);
+                ImGui::TextWrapped("glxyAbout8"_C, sf::version().string.data());
                 ImGui::TextWrapped("glxyAbout9"_C, ImGui::GetVersion());
                 ImGui::Unindent();
                 ImGui::TextWrapped("glxyAbout10"_C, GalaxyStartUpTime.asMilliseconds());

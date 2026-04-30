@@ -573,11 +573,11 @@ void Render(sf::RenderWindow& window)
 
 void Render(sf::RenderTarget& target)
 {
-    target.resetGLStates();
     target.pushGLStates();
     ImGui::Render();
     RenderDrawLists(ImGui::GetDrawData());
     target.popGLStates();
+    target.resetGLStates();
 }
 
 void Render()
@@ -755,7 +755,7 @@ void SetRStickYAxis(sf::Joystick::Axis rStickYAxis, bool inverted)
 void SetLTriggerAxis(sf::Joystick::Axis lTriggerAxis)
 {
     assert(s_currWindowCtx);
-    s_currWindowCtx->rTriggerInfo.axis = lTriggerAxis;
+    s_currWindowCtx->lTriggerInfo.axis = lTriggerAxis;
 }
 
 void SetRTriggerAxis(sf::Joystick::Axis rTriggerAxis)
@@ -892,13 +892,10 @@ void DrawRectFilled(const sf::FloatRect& rect, const sf::Color& color, float rou
 
 namespace
 {
-
-static int shaderHandle = 0;
-
-static int posAttrib = -1;
-static int colAttrib = -1;
-static int texAttrib = -1;
-
+int shaderHandle = 0;
+int posAttrib = -1;
+int colAttrib = -1;
+int texAttrib = -1;
 // copied from imgui/backends/imgui_impl_opengl2.cpp
 void SetupRenderState(ImDrawData* draw_data, int fb_width, int fb_height)
 {
@@ -913,18 +910,7 @@ void SetupRenderState(ImDrawData* draw_data, int fb_width, int fb_height)
     glDisable(GL_STENCIL_TEST);
     glEnable(GL_SCISSOR_TEST);
 
-#ifndef SFML_OPENGL_ES
-    glEnable(GL_TEXTURE_2D);
-    glDisable(GL_LIGHTING);
-    glDisable(GL_COLOR_MATERIAL);
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-    glEnableClientState(GL_COLOR_ARRAY);
-    glDisableClientState(GL_NORMAL_ARRAY);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glShadeModel(GL_SMOOTH);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-#else
+#ifdef SFML_OPENGL_ES2
     const sf::Shader& shader = sf::Shader::getDefaultTexShader();
 
     sf::Shader::bind(&shader);
@@ -942,6 +928,19 @@ void SetupRenderState(ImDrawData* draw_data, int fb_width, int fb_height)
         glEnableVertexAttribArray(colAttrib);
     if (texAttrib >= 0)
         glEnableVertexAttribArray(texAttrib);
+#else
+    glDisable(GL_LIGHTING);
+    glDisable(GL_COLOR_MATERIAL);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    glEnableClientState(GL_COLOR_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+    glEnable(GL_TEXTURE_2D);
+#ifndef GL_VERSION_ES_CL_1_1
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+#endif
+    glShadeModel(GL_SMOOTH);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 #endif
 
     // Setup viewport, orthographic projection matrix
@@ -949,12 +948,7 @@ void SetupRenderState(ImDrawData* draw_data, int fb_width, int fb_height)
     // draw_data->DisplayPos+data_data->DisplaySize (bottom right). DisplayPos is (0,0) for single
     // viewport apps.
     glViewport(0, 0, (GLsizei)fb_width, (GLsizei)fb_height);
-#ifndef SFML_OPENGL_ES
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-#endif
-#ifdef SFML_OPENGL_ES
+#ifdef SFML_OPENGL_ES2
     float left = draw_data->DisplayPos.x, right = draw_data->DisplayPos.x + draw_data->DisplaySize.x, bottom = draw_data->DisplayPos.y + draw_data->DisplaySize.y,
             top = draw_data->DisplayPos.y, _near = -1.f, _far = 1.f;
 
@@ -970,12 +964,25 @@ void SetupRenderState(ImDrawData* draw_data, int fb_width, int fb_height)
     const_cast<sf::Shader*>(&sf::Shader::getDefaultTexShader())->setUniform("sf_modelview", static_cast<sf::Glsl::Mat4>(sf::Transform::Identity.getMatrix()));
     const_cast<sf::Shader*>(&sf::Shader::getDefaultTexShader())->setUniform("sf_texture", static_cast<sf::Glsl::Mat4>(sf::Transform::Identity.getMatrix()));
     const_cast<sf::Shader*>(&sf::Shader::getDefaultTexShader())->setUniform("factor_npot", sf::Vector2f(1.f, 1.f));
-
 #else
-    glOrtho(draw_data->DisplayPos.x, draw_data->DisplayPos.x + draw_data->DisplaySize.x,
-        draw_data->DisplayPos.y + draw_data->DisplaySize.y, draw_data->DisplayPos.y, -1.0f,
-        +1.0f);
-
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+#ifdef GL_VERSION_ES_CL_1_1
+    glOrthof(draw_data->DisplayPos.x,
+             draw_data->DisplayPos.x + draw_data->DisplaySize.x,
+             draw_data->DisplayPos.y + draw_data->DisplaySize.y,
+             draw_data->DisplayPos.y,
+             -1.0f,
+             +1.0f);
+#else
+    glOrtho(draw_data->DisplayPos.x,
+            draw_data->DisplayPos.x + draw_data->DisplaySize.x,
+            draw_data->DisplayPos.y + draw_data->DisplaySize.y,
+            draw_data->DisplayPos.y,
+            -1.0f,
+            +1.0f);
+#endif
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
@@ -1006,21 +1013,25 @@ void RenderDrawLists(ImDrawData* draw_data)
     // Backup GL state
     GLint last_texture = 0;
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
+
+#if !defined(GL_VERSION_ES_CL_1_1) && !defined(SFML_OPENGL_ES2)
+    GLint last_polygon_mode[2];
+    glGetIntegerv(GL_POLYGON_MODE, last_polygon_mode);
+#endif
+
     GLint last_viewport[4];
     glGetIntegerv(GL_VIEWPORT, last_viewport);
     GLint last_scissor_box[4];
     glGetIntegerv(GL_SCISSOR_BOX, last_scissor_box);
 
-#ifndef SFML_OPENGL_ES
-    GLint last_polygon_mode[2];
-    glGetIntegerv(GL_POLYGON_MODE, last_polygon_mode);
+#ifndef SFML_OPENGL_ES2
     GLint last_shade_model = 0;
     glGetIntegerv(GL_SHADE_MODEL, &last_shade_model);
     GLint last_tex_env_mode = 0;
     glGetTexEnviv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, &last_tex_env_mode);
 #endif
 
-#ifdef SFML_OPENGL_ES
+#if defined(GL_VERSION_ES_CL_1_1) || defined(SFML_OPENGL_ES2)
     GLint last_array_buffer;
     glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &last_array_buffer);
     GLint last_element_array_buffer;
@@ -1043,21 +1054,22 @@ void RenderDrawLists(ImDrawData* draw_data)
         const ImDrawList* cmd_list   = draw_data->CmdLists[n];
         const ImDrawVert* vtx_buffer = cmd_list->VtxBuffer.Data;
         const ImDrawIdx*  idx_buffer = cmd_list->IdxBuffer.Data;
-#ifndef SFML_OPENGL_ES
-        glVertexPointer(2, GL_FLOAT, sizeof(ImDrawVert),
-                        (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, pos)));
-        glTexCoordPointer(2, GL_FLOAT, sizeof(ImDrawVert),
-                          (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, uv)));
-        glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(ImDrawVert),
-                       (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, col)));
-#else
+#ifdef SFML_OPENGL_ES2
         glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert),
                               (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, pos)));
         glVertexAttribPointer(texAttrib, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert),
                               (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, uv)));
         glVertexAttribPointer(colAttrib, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert),
                               (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, col)));
+#else
+        glVertexPointer(2, GL_FLOAT, sizeof(ImDrawVert), (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, pos)));
+        glTexCoordPointer(2, GL_FLOAT, sizeof(ImDrawVert), (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, uv)));
+        glColorPointer(4,
+                       GL_UNSIGNED_BYTE,
+                       sizeof(ImDrawVert),
+                       (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, col)));
 #endif
+
         for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
         {
             const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
@@ -1081,7 +1093,7 @@ void RenderDrawLists(ImDrawData* draw_data)
                 clip_rect.w = (pcmd->ClipRect.w - clip_off.y) * clip_scale.y;
 
                 if (clip_rect.x < static_cast<float>(fb_width) && clip_rect.y < static_cast<float>(fb_height) &&
-                    clip_rect.z >= 0.0f && clip_rect.w >= 0.0f)
+                    clip_rect.z - clip_rect.x >= 0.0f && clip_rect.w - clip_rect.y >= 0.0f)
                 {
                     // Apply scissor/clipping rectangle
                     glScissor((int)clip_rect.x,
@@ -1090,7 +1102,7 @@ void RenderDrawLists(ImDrawData* draw_data)
                               (int)(clip_rect.w - clip_rect.y));
 
                     // Bind texture, Draw
-                    const GLuint textureHandle = convertImTextureIDToGLTextureHandle(pcmd->TextureId);
+                    const GLuint textureHandle = convertImTextureIDToGLTextureHandle(pcmd->GetTexID());
                     glBindTexture(GL_TEXTURE_2D, textureHandle);
                     glDrawElements(GL_TRIANGLES,
                                    (GLsizei)pcmd->ElemCount,
@@ -1101,9 +1113,16 @@ void RenderDrawLists(ImDrawData* draw_data)
         }
     }
 
-
+#ifdef SFML_OPENGL_ES2
+    if (posAttrib >= 0)
+        glDisableVertexAttribArray(posAttrib);
+    if (colAttrib >= 0)
+        glDisableVertexAttribArray(colAttrib);
+    if (texAttrib >= 0)
+        glDisableVertexAttribArray(texAttrib);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)last_texture);
+#else
     // Restore modified GL state
-#ifndef SFML_OPENGL_ES
     glDisableClientState(GL_COLOR_ARRAY);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     glDisableClientState(GL_VERTEX_ARRAY);
@@ -1112,28 +1131,21 @@ void RenderDrawLists(ImDrawData* draw_data)
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
+
+#ifndef GL_VERSION_ES_CL_1_1
     glPopAttrib();
     glPolygonMode(GL_FRONT, (GLenum)last_polygon_mode[0]);
     glPolygonMode(GL_BACK, (GLenum)last_polygon_mode[1]);
-#else
-    if (posAttrib >= 0)
-        glDisableVertexAttribArray(posAttrib);
-    if (colAttrib >= 0)
-        glDisableVertexAttribArray(colAttrib);
-    if (texAttrib >= 0)
-        glDisableVertexAttribArray(texAttrib);
-    glBindTexture(GL_TEXTURE_2D, (GLuint)last_texture);
+#endif
 #endif
 
-    glViewport(last_viewport[0], last_viewport[1], (GLsizei)last_viewport[2],
-               (GLsizei)last_viewport[3]);
-    glScissor(last_scissor_box[0], last_scissor_box[1], (GLsizei)last_scissor_box[2],
-              (GLsizei)last_scissor_box[3]);
-
-#ifndef SFML_OPENGL_ES
+    glViewport(last_viewport[0], last_viewport[1], (GLsizei)last_viewport[2], (GLsizei)last_viewport[3]);
+    glScissor(last_scissor_box[0], last_scissor_box[1], (GLsizei)last_scissor_box[2], (GLsizei)last_scissor_box[3]);
+#ifndef SFML_OPENGL_ES2
     glShadeModel((GLenum)last_shade_model);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, last_tex_env_mode);
-#else
+#endif
+#if defined(GL_VERSION_ES_CL_1_1) || defined(SFML_OPENGL_ES_2)
     glBindBuffer(GL_ARRAY_BUFFER, last_array_buffer);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, last_element_array_buffer);
     glDisable(GL_SCISSOR_TEST);

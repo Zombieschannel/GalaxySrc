@@ -10,6 +10,7 @@ enum class UIElementType
     Drag,
     Move,
     Area,
+    Rotate,
     Count
 };
 class EditorUIElement : public Drawable, public Transformable
@@ -45,7 +46,9 @@ public:
     void Start(UIElementType type, bool moveInPixels, bool disableXAxis, bool disableYAxis, const View& view, const View& viewUI, const Texture& texture);
     Vector2f getDelta() const;
     bool isSelected() const;
+    bool isHovered() const;
     bool hasChanged() const;
+    Transform getCalculatedTransform(const RenderTarget& target) const;
     void setSelectColor(Color selectColor);
     void Update(const RenderTarget& target, Vector2f mousePos, Vector2f mousePosUI);
 

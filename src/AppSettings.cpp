@@ -27,8 +27,13 @@ void glxy::AppSettings::Save() const
     file.setValue("aspectResize", maintainAspectResize);
     file.setValue("aspectCanvas", maintainAspectCanvas);
     file.setValue("resamplingMethod", resamplingMethod);
+    file.setValue("brushRadius", brushRadius);
+    file.setValue("eraserRadius", eraserRadius);
+    file.setValue("shapeRadius", shapeRadius);
+    file.setValue("colorSwapRadius", colorSwapRadius);
     file.setValue("bucketTolerance", bucketTolerance);
     file.setValue("wandTolerance", wandTolerance);
+    file.setValue("colorSwapTolerance", colorSwapTolerance);
     file.setValue("syncViewport", syncViewport);
     file.setValue("showFPS", showFPS);
     file.setValue("showGrid", showGrid);
@@ -37,6 +42,21 @@ void glxy::AppSettings::Save() const
     file.setValue("panMouseButton", panMouseButton);
     file.setValue("colorPickerTriangle", colorPickerTriangle);
     file.setValue("debugMode", debugMode);
+    file.setValue("gridBoldX", gridBold.x);
+    file.setValue("gridBoldY", gridBold.y);
+    file.setValue("letterSpacing", letterSpacing);
+    file.setValue("lineSpacing", lineSpacing);
+    file.setValue("fontID", fontID);
+    file.setValue("shapeID", shapeID);
+    file.setValueStr("fontLocation", fontLocation);
+    file.setValue("textOutlineThickness", textOutlineThickness);
+    file.setValue("textSize", textSize);
+    file.setValue("shapeOutlineThickness", shapeOutlineThickness);
+
+    file.setValue("windowToolOpen", openWindow.at(0));
+    file.setValue("windowColorOpen", openWindow.at(1));
+    file.setValue("windowLayersOpen", openWindow.at(2));
+
     file.setValue("recentFileCount", static_cast<int32_t>(recentFiles.size()));
     int8_t counter = 0;
     for (auto& n : recentFiles)
@@ -74,7 +94,12 @@ void glxy::AppSettings::Load()
         file.loadValue("aspectResize", maintainAspectResize);
         file.loadValue("aspectCanvas", maintainAspectCanvas);
         file.loadValue("resamplingMethod", resamplingMethod);
-        file.loadValue("bucketTolerange", bucketTolerance);
+        file.loadValue("brushRadius", brushRadius);
+        file.loadValue("eraserRadius", eraserRadius);
+        file.loadValue("shapeRadius", shapeRadius);
+        file.loadValue("colorSwapRadius", colorSwapRadius);
+        file.loadValue("bucketTolerance", bucketTolerance);
+        file.loadValue("colorSwapTolerance", colorSwapTolerance);
         file.loadValue("wandTolerance", wandTolerance);
         file.loadValue("syncViewport", syncViewport);
         file.loadValue("showFPS", showFPS);
@@ -84,6 +109,20 @@ void glxy::AppSettings::Load()
         file.loadValue("panMouseButton", panMouseButton);
         file.loadValue("colorPickerTriangle", colorPickerTriangle);
         file.loadValue("debugMode", debugMode);
+        file.loadValue("gridBoldX", gridBold.x);
+        file.loadValue("gridBoldY", gridBold.y);
+        file.loadValue("letterSpacing", letterSpacing);
+        file.loadValue("lineSpacing", lineSpacing);
+        file.loadValue("fontID", fontID);
+        file.loadValue("shapeID", shapeID);
+        file.loadValue("fontLocation", fontLocation);
+        file.loadValue("textOutlineThickness", textOutlineThickness);
+        file.loadValue("textSize", textSize);
+        file.loadValue("shapeOutlineThickness", shapeOutlineThickness);
+
+        file.loadValue("windowToolOpen", openWindow.at(0));
+        file.loadValue("windowColorOpen", openWindow.at(1));
+        file.loadValue("windowLayersOpen", openWindow.at(2));
 
         int8_t recentCount = 0;
         file.loadValue("recentFileCount", recentCount);

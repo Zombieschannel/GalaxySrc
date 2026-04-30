@@ -10,6 +10,16 @@ bool glxy::ImageEditorWorkerCommon::getWandFill() const
     return wandFill;
 }
 
+bool glxy::ImageEditorWorkerCommon::getShapeDraw() const
+{
+    return shapeDraw;
+}
+
+bool glxy::ImageEditorWorkerCommon::getTextDraw() const
+{
+    return textDraw;
+}
+
 bool glxy::ImageEditorWorkerCommon::getGradientDraw() const
 {
     return gradientDraw;
@@ -20,17 +30,22 @@ bool glxy::ImageEditorWorkerCommon::getGradientSetup() const
     return gradientSetup;
 }
 
+bool glxy::ImageEditorWorkerCommon::getMoveSelected() const
+{
+    return moveSelected;
+}
+
+IntRect glxy::ImageEditorWorkerCommon::getNewMoveSelectArea() const
+{
+    return newMoveSelectArea;
+}
+
 bool glxy::ImageEditorWorkerCommon::getMoveSelection() const
 {
     return moveSelection;
 }
 
-IntRect glxy::ImageEditorWorkerCommon::getNewMoveSelectionArea() const
-{
-    return newMoveSelectionArea;
-}
-
 bool glxy::ImageEditorWorkerCommon::hasUnfinishedChanges() const
 {
-    return bucketFill || wandFill || gradientDraw || moveSelection;
+    return bucketFill || wandFill || gradientDraw || moveSelected || shapeDraw || textDraw;
 }

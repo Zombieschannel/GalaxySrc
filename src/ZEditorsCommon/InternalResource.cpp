@@ -7,7 +7,7 @@
 
 using namespace sf;
 #ifdef SFML_SYSTEM_WINDOWS
-string InternalResource::getResource(int resource_id, const std::string& resource_class)
+string InternalResource::getResource(int32_t resource_id, const std::string& resource_class)
 {
 	HRSRC hResource = nullptr;
 	HGLOBAL hMemory = nullptr;
@@ -26,9 +26,9 @@ string InternalResource::getResource(int resource_id, const std::string& resourc
 	return std::string(dst);
 }
 #else
-string InternalResource::getResource(int resource_id, const std::string& resource_class)
+string InternalResource::getResource(int32_t resource_id, const std::string& resource_class)
 {
-	const std::vector<std::pair<int, std::string>> assets =
+	const std::vector<std::pair<int32_t, std::string>> assets =
 	{
 		{ID_RES1, "Res/Montserrat.ttf"},
 		{ID_RES2, "Res/Languages.csv"},
@@ -38,6 +38,10 @@ string InternalResource::getResource(int resource_id, const std::string& resourc
 		{ID_RES6, "Res/Setup.png"},
 		{ID_RES7, "Res/Gizmo.png"},
 		{ID_RES8, "Res/LayerIcons.png"},
+		{ID_RES9, "Res/TextIcons.png"},
+		{ID_RES10,"Res/FinalizeIcons.png"},
+		{ID_RES11,"Res/CursorIcons.png"},
+		{ID_RES12,"Res/MenuIcons.png"},
 	};
 	std::string x;
 	for (auto& n : assets)
@@ -48,7 +52,7 @@ string InternalResource::getResource(int resource_id, const std::string& resourc
 			if (file.open(n.second))
 			{
 				x.resize(*file.getSize());
-				file.read(&x[0], *file.getSize());
+				static_cast<void>(file.read(&x[0], *file.getSize()));
 			}
 		}
 	}

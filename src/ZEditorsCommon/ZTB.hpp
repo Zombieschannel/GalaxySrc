@@ -1086,16 +1086,16 @@ class Distance
 public:
 	static float Point_Circle(const sf::Vector2f& pos1, const sf::Vector2f& pos2, const float radius2)
 	{
-		return std::sqrtf((pos1.x - pos2.x) * (pos1.x - pos2.x) + (pos1.y - pos2.y) * (pos1.y - pos2.y)) - radius2;
+		return std::sqrt((pos1.x - pos2.x) * (pos1.x - pos2.x) + (pos1.y - pos2.y) * (pos1.y - pos2.y)) - radius2;
 	}
 	static float Point_Circle(const sf::Vector2f& point1, const sf::CircleShape& circle2)
 	{
-		return std::sqrtf((point1.x - circle2.getPosition().x) * (point1.x - circle2.getPosition().x)
+		return std::sqrt((point1.x - circle2.getPosition().x) * (point1.x - circle2.getPosition().x)
 			+ (point1.y - circle2.getPosition().y) * (point1.y - circle2.getPosition().y)) - circle2.getRadius();
 	}
 	static float Point_Point(const sf::Vector2f& pos1, const sf::Vector2f& pos2)
 	{
-		return std::sqrtf((pos1.x - pos2.x) * (pos1.x - pos2.x) + (pos1.y - pos2.y) * (pos1.y - pos2.y));
+		return std::sqrt((pos1.x - pos2.x) * (pos1.x - pos2.x) + (pos1.y - pos2.y) * (pos1.y - pos2.y));
 	}
 	static float Point_Rectangle(const sf::Vector2f& pos1, const sf::RectangleShape& rectangle)
 	{
@@ -1112,7 +1112,7 @@ public:
 
 		const sf::Vector2f dist = sf::Vector2f(pos1.x - tests.x, pos1.y - tests.y);
 		const float distanceSqr = (dist.x * dist.x) + (dist.y * dist.y);
-		return std::sqrtf(distanceSqr);
+		return std::sqrt(distanceSqr);
 	}
 	static float Point_Rectangle(const sf::Vector2f& pos1, const sf::FloatRect& rectangle)
 	{
@@ -1129,7 +1129,7 @@ public:
 
 		const sf::Vector2f dist = sf::Vector2f(pos1.x - tests.x, pos1.y - tests.y);
 		const float distanceSqr = dist.x * dist.x + dist.y * dist.y;
-		return std::sqrtf(distanceSqr);
+		return std::sqrt(distanceSqr);
 	}
 private:
 	static Distance& Get()
@@ -1196,7 +1196,7 @@ public:
 
 		float distX = point1.x - point2.x;
 		float distY = point1.y - point2.y;
-		const float len = std::sqrtf(distX * distX + distY * distY);
+		const float len = std::sqrt(distX * distX + distY * distY);
 
 		const float dot = (((circle.getPosition().x - point1.x) * (point2.x - point1.x)) + ((circle.getPosition().y - point1.y) * (point2.y - point1.y))) / (len * len);
 
@@ -1209,7 +1209,7 @@ public:
 		distX = closestX - circle.getPosition().x;
 		distY = closestY - circle.getPosition().y;
 
-		if (std::sqrtf(distX * distX + distY * distY) <= circle.getRadius())
+		if (std::sqrt(distX * distX + distY * distY) <= circle.getRadius())
 			return true;
 		return false;
 	}
@@ -1223,7 +1223,7 @@ public:
 
 		float distX = point1.x - point2.x;
 		float distY = point1.y - point2.y;
-		const float len = std::sqrtf(distX * distX + distY * distY);
+		const float len = std::sqrt(distX * distX + distY * distY);
 
 		const float dot = (((circlePos.x - point1.x) * (point2.x - point1.x)) + ((circlePos.y - point1.y) * (point2.y - point1.y))) / (len * len);
 
@@ -1235,9 +1235,17 @@ public:
 
 		distX = closestX - circlePos.x;
 		distY = closestY - circlePos.y;
-		if (std::sqrtf(distX * distX + (distY * distY)) <= radius)
+		if (std::sqrt(distX * distX + (distY * distY)) <= radius)
 			return true;
 		return false;
+	}
+	static std::optional<sf::Vector2f> Line_Line(const sf::Vector2f& p1, const sf::Vector2f& p2, const sf::Vector2f& p3, const sf::Vector2f& p4)
+	{
+		const float uA = ((p4.x - p3.x) * (p1.y - p3.y) - (p4.y - p3.y) * (p1.x - p3.x)) / ((p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y));
+		const float uB = ((p2.x - p1.x) * (p1.y - p3.y) - (p2.y - p1.y) * (p1.x - p3.x)) / ((p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y));
+		if (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1)
+			return std::optional(sf::Vector2f(p1.x + (uA * (p2.x - p1.x)), p1.y + (uA * (p2.y - p1.y))));
+		return std::nullopt;
 	}
 
 	static bool Circle_Rectangle(const sf::CircleShape& circle, const sf::RectangleShape& rectangle)

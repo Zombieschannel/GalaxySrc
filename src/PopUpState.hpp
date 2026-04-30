@@ -20,5 +20,7 @@ enum class PopUpState
     Adjustment,
     Effect,
     ToolChanged,
-    Count
+    GridBold,
+    Search,
+    Count,
 };

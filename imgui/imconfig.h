@@ -143,6 +143,7 @@ namespace ImGui
 
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/System/Vector2.hpp>
+#include "../src/Color32f.hpp"
 
 #include <cstdint>
 
@@ -168,4 +169,9 @@ namespace ImGui
                          static_cast<std::uint8_t>(y * 255.f),                                    \
                          static_cast<std::uint8_t>(z * 255.f),                                    \
                          static_cast<std::uint8_t>(w * 255.f));                                   \
+    }                                                                                             \
+    ImVec4(const Color32f& c) : x(c.r), y(c.g), z(c.b), w(c.a) {                                  \
+    }                                                                                             \
+    operator Color32f() const {                                                                   \
+        return Color32f(x, y, z, w);                                                              \
     }

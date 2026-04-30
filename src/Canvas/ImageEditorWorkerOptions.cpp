@@ -96,18 +96,14 @@ void glxy::ImageEditorWorker::OptionRotate90CW()
 {
     OptionFinish();
 
-    chunkManager.lockAllChunks();
     chunkManager.rotate90CW();
-    chunkManager.unlockAllChunks();
 }
 
 void glxy::ImageEditorWorker::OptionRotate90CCW()
 {
     OptionFinish();
 
-    chunkManager.lockAllChunks();
     chunkManager.rotate90CCW();
-    chunkManager.unlockAllChunks();
 }
 
 void glxy::ImageEditorWorker::OptionRotate180()
@@ -119,18 +115,19 @@ void glxy::ImageEditorWorker::OptionRotate180()
     chunkManager.unlockAllChunks();
 }
 
-void glxy::ImageEditorWorker::OptionCopyToClipboard(Image& target, Vector2u& location, const LayerID layerID)
+void glxy::ImageEditorWorker::OptionCopyToClipboard(Image& target, Vector2u& location, Image& selectionTarget, const LayerID layerID)
 {
     OptionFinish();
-
     chunkManager.CopySelectedColorPixels(target, location, layerID);
+    selectionTarget.resize(target.getSize());
+    chunkManager.CopyImage(selectionTarget, Vector2i(), IntRect(Vector2i(location), Vector2i(target.getSize())), ImageLayerType::Selection);
 }
 
-void glxy::ImageEditorWorker::OptionSelectAll()
+void glxy::ImageEditorWorker::OptionSelectArea(const FloatRect& area)
 {
     OptionFinish();
 
-    chunkManager.selectAll();
+    chunkManager.selectArea(area);
 }
 
 void glxy::ImageEditorWorker::OptionDeselectAll()
@@ -144,44 +141,51 @@ void glxy::ImageEditorWorker::OptionDeleteSelected(const LayerID layerID)
 {
     OptionFinish();
 
-    assert(!chunkManager.getFinalSelectionBounds().expired());
+    if (chunkManager.getFinalSelectionBounds().expired())
+        return;
 
     ForEachPixelInChunkArea(*chunkManager.getFinalSelectionBounds().lock(), true, [&](const Vector2i coord)
     {
-        if (chunkManager.getPixelSelection(Vector2u(coord)))
-            chunkManager.setPixelColor(Vector2u(coord), Color::Transparent, layerID);
+        if (chunkManager.getPixelSelection(coord))
+            chunkManager.setPixelColor(coord, Color::Transparent, layerID);
     });
 
     chunkManager.resetSelection();
 }
 
-void glxy::ImageEditorWorker::OptionPasteFromClipboard(const Image& src, Vector2u location)
+void glxy::ImageEditorWorker::OptionPasteFromClipboard(const Image& src, Vector2u location, const Image& selection)
 {
     OptionFinish();
 
     if (location.x + src.getSize().x > getSize().x || location.y + src.getSize().y > getSize().y)
         location = Vector2u();
 
+    chunkManager.lockAllChunks();
     chunkManager.resetSelection();
-    chunkManager.createSelectionLayer();
+    chunkManager.createSelectionLayerAll();
+    chunkManager.unlockAllChunks();
+
     colorBufferTemp = make_unique<Image>();
     colorBufferTemp->resize(src.getSize());
     validate(colorBufferTemp->copy(src, Vector2u()));
 
     {
         lock_guard lock(mtxEditorWorkerCommon);
-        newMoveSelectionArea = IntRect(Vector2i(location), Vector2i(colorBufferTemp->getSize()));
-        moveSelection = true;
+        newMoveSelectArea = IntRect(Vector2i(location), Vector2i(colorBufferTemp->getSize()));
+        moveSelected = true;
     }
     selectionBufferTemp = make_unique<Image>();
-    selectionBufferTemp->resize(src.getSize(), Color::Black);
+    selectionBufferTemp->resize(src.getSize());
+    validate(selectionBufferTemp->copy(selection, Vector2u()));
 }
 
 void glxy::ImageEditorWorker::OptionCancel()
 {
     if (bucketFill)
     {
-        chunkManager.deleteColorTempLayer();
+        chunkManager.lockAllChunks();
+        chunkManager.deleteColorTempLayerAll();
+        chunkManager.unlockAllChunks();
         lock_guard lock(mtxEditorWorkerCommon);
         bucketFill = false;
     }
@@ -193,24 +197,32 @@ void glxy::ImageEditorWorker::OptionCancel()
     }
     if (gradientDraw)
     {
-        chunkManager.deleteColorTempLayer();
+        chunkManager.lockAllChunks();
+        chunkManager.deleteColorTempLayerAll();
+        chunkManager.unlockAllChunks();
         lock_guard lock(mtxEditorWorkerCommon);
         gradientDraw = false;
     }
-    if (moveSelection)
+    if (moveSelected)
     {
         if (!chunkManager.getFinalSelectionBounds().expired())
             CancelMovePixels(*chunkManager.getFinalSelectionBounds().lock());
         else
         {
             CancelMovePixels(IntRect());
-            chunkManager.deleteSelectionLayer();
+            chunkManager.deleteSelectionLayerAll();
         }
+        moveSelected = false;
+    }
+    if (moveSelection)
+    {
+        assert(!chunkManager.getFinalSelectionBounds().expired());
+        CancelMoveSelection(*chunkManager.getFinalSelectionBounds().lock());
         moveSelection = false;
     }
     if (transformImage)
     {
-        if (chunkManager.hasSelectionLayer(0))
+        if (chunkManager.anyHasSelectionLayer())
         {
             assert(!chunkManager.getFinalSelectionBounds().expired());
             CancelMovePixels(*chunkManager.getFinalSelectionBounds().lock());
@@ -221,6 +233,22 @@ void glxy::ImageEditorWorker::OptionCancel()
         lock_guard lock(mtxEditorWorkerCommon);
         transformImageSelectionArea = IntRect();
         transformImage = false;
+    }
+    if (shapeDraw)
+    {
+        chunkManager.lockAllChunks();
+        chunkManager.deleteColorTempLayerAll();
+        chunkManager.unlockAllChunks();
+        lock_guard lock(mtxEditorWorkerCommon);
+        shapeDraw = false;
+    }
+    if (textDraw)
+    {
+        chunkManager.lockAllChunks();
+        chunkManager.deleteColorTempLayerAll();
+        chunkManager.unlockAllChunks();
+        lock_guard lock(mtxEditorWorkerCommon);
+        textDraw = false;
     }
 }
 
@@ -244,9 +272,15 @@ void glxy::ImageEditorWorker::OptionFinish()
         lock_guard lock(mtxEditorWorkerCommon);
         gradientDraw = false;
     }
+    if (moveSelected)
+    {
+        FinishMovePixels(newMoveSelectArea);
+        lock_guard lock(mtxEditorWorkerCommon);
+        moveSelected = false;
+    }
     if (moveSelection)
     {
-        FinishMovePixels(newMoveSelectionArea);
+        FinishMoveSelection(newMoveSelectArea);
         lock_guard lock(mtxEditorWorkerCommon);
         moveSelection = false;
     }
@@ -257,6 +291,18 @@ void glxy::ImageEditorWorker::OptionFinish()
         lock_guard lock(mtxEditorWorkerCommon);
         transformImageSelectionArea = IntRect();
         transformImage = false;
+    }
+    if (shapeDraw)
+    {
+        MergeColorTempLayer(workingLayer, BlendAlpha);
+        lock_guard lock(mtxEditorWorkerCommon);
+        shapeDraw = false;
+    }
+    if (textDraw)
+    {
+        MergeColorTempLayer(workingLayer, BlendAlpha);
+        lock_guard lock(mtxEditorWorkerCommon);
+        textDraw = false;
     }
 }
 
@@ -271,15 +317,15 @@ void glxy::ImageEditorWorker::OptionSetupTransformImage(const LayerID layerID)
         colorBufferTemp = make_unique<Image>();
 
     if (lock_guard lock(chunkManager.mtxChunkManager);
-        !chunkManager.hasSelectionLayer(0))
+        !chunkManager.anyHasSelectionLayer())
     {
         colorBufferTemp->resize(getSize(), Color::Transparent);
         chunkManager.lockAllChunks();
-        chunkManager.CopyImage(*colorBufferTemp, Vector2u(), IntRect(), ImageLayerType::Color, layerID);
+        chunkManager.CopyImage(*colorBufferTemp, Vector2i(), IntRect(), ImageLayerType::Color, layerID);
 
         Image empty;
         empty.resize(getSize(), Color::Transparent);
-        chunkManager.PasteImage(empty, Vector2u(), IntRect(), ImageLayerType::Color, layerID);
+        chunkManager.PasteImage(empty, Vector2i(), IntRect(), ImageLayerType::Color, layerID);
         chunkManager.unlockAllChunks();
     }
     else
@@ -304,16 +350,16 @@ void glxy::ImageEditorWorker::OptionTransformImage(const Vector2f pos, const flo
     {
         lock_guard lock(chunkManager.mtxChunkManager);
         chunkManager.lockAllChunks();
-        if (!chunkManager.hasColorTempLayer(0))
+        if (!chunkManager.allHaveColorTempLayer())
             chunkManager.createColorTempLayerAll(getBlendMode(BlendAlpha));
         else
             chunkManager.clearColorTempLayerAll(Color::Transparent);
-        if (chunkManager.hasSelectionLayer(0))
-            chunkManager.clearSelectionLayer(false);
+        if (chunkManager.anyHasSelectionLayer())
+            chunkManager.clearSelectionLayerAll(false);
         chunkManager.unlockAllChunks();
     }
 
-    const IntRect rect = TransformImage(tran->getTransform(), tile);
+    const IntRect rect = TransformImage(tran->getTransform(), tile, false);
     lock_guard lock(mtxEditorWorkerCommon);
     transformImageSelectionArea = rect;
 }
@@ -331,8 +377,8 @@ void glxy::ImageEditorWorker::OptionCropSelection()
     for (LayerID i = 0; i < chunkManager.getLayerCount(); i++)
         chunkManager.CopySelectedColorPixels(temp.at(i), dummy, i);
 
-    AllocateChunks(Vector2u(final.size), Color::Transparent);
+    AllocateChunks(Vector2u(final.size));
 
     for (LayerID i = 0; i < chunkManager.getLayerCount(); i++)
-        chunkManager.PasteImage(temp.at(i), Vector2u(), IntRect(), ImageLayerType::Color, i);
+        chunkManager.PasteImage(temp.at(i), Vector2i(), IntRect(), ImageLayerType::Color, i);
 }

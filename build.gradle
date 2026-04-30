@@ -1,12 +1,12 @@
 plugins {
-    id 'com.android.application' version '7.4.2' apply true
+    id 'com.android.application' version '8.13.2' apply true
 }
 
 android {
     defaultConfig {
         applicationId "com.Zombieschannel.Galaxy"
-        versionCode 22
-        versionName "0.2.2"
+        versionCode 31
+        versionName "0.3.1"
 
         externalNativeBuild {
             cmake {
@@ -15,8 +15,8 @@ android {
                 abiFilters 'armeabi-v7a', "arm64-v8a", "x86", "x86_64"
             }
         }
-        targetSdk 34
-        minSdk 22
+        targetSdk 37
+        minSdk 21
     }
     packagingOptions {
         jniLibs {
@@ -59,8 +59,8 @@ android {
         }
     }
     buildToolsVersion '35.0.0'
-    ndkVersion '25.1.8937393'
-    compileSdk 34
+    ndkVersion '28.2.13676358'
+    compileSdk 37
     namespace 'com.Zombieschannel.Galaxy'
     sourceSets {
         main {
@@ -77,5 +77,5 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.5.1'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
 }

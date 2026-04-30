@@ -3,7 +3,6 @@
 #include "../AppSettings.hpp"
 #include "../Canvas/CanvasWorker.hpp"
 #include "../Namespace.hpp"
-#include "imgui.h"
 #include "../UIElements/EditorUiElement.hpp"
 #include "../UIElements/RulerUi.hpp"
 #include "../UIElements/GridLines.hpp"
@@ -15,6 +14,7 @@
 #include "ChunkTextureManager.hpp"
 #include "../Canvas/ImageEditorWorkerCommon.hpp"
 #include "../UIElements/PixelSelectAnimation.hpp"
+#include <imgui.h>
 
 namespace glxy
 {
@@ -24,6 +24,7 @@ namespace glxy
         EditorID editorID;
         int16_t arrayID;
         const ImGuiID& dockID;
+        const bool isInfinite;
         filesystem::path imagePath;
         int32_t imageJPGQuality = 0;
 
@@ -39,7 +40,7 @@ namespace glxy
         LayerPicker& _layerPicker;
         const ColorPicker& _colorPicker;
         Tool currentTool = Tool::Pencil;
-        array<ImVec4, c_colorCount> currentColor;
+        array<Color32f, c_colorCount> currentColor;
 
         Texture transparentLayer;
         bool viewHovered = false;
@@ -75,27 +76,48 @@ namespace glxy
         EditorUIElement gradientEnd;
         EditorUIElement gradientMove;
 
-        IntRect moveSelectionArea;
+        EditorUIElement shapeMove;
+        EditorUIElement shapeRotate;
+        EditorUIElement shapeMoveArea;
+        ConvexShape shape;
+        vector<EditorUIElement> shapeSizePoints;
+        Vector2i shapeStartPosition;
+        Vector2i shapeEndPosition;
+        Vector2i shapeSize;
+
+        EditorUIElement textMove;
+        EditorUIElement textRotate;
+        String textString;
+        Text text;
+
+        Vector2i moveSelectionSize;
         Vector2i moveSelectionOriginalSize;
         Transformable moveSelectionTransform;
         EditorUIElement moveSelectionMove;
+        EditorUIElement moveSelectionRotate;
         EditorUIElement moveSelectionMoveArea;
         vector<EditorUIElement> moveSelectionPoints;
 
         const AppSettings& settings;
         const vector<PopUpState>& popUpState;
         Window& window;
-        unique_ptr<Cursor>& cursor;
-        Cursor::Type& cursorType;
         const Texture& gizmoIcons;
         const ChunkManager& chunkManager;
         const ImageEditorWorkerCommon& common;
+        const shared_ptr<Font>& textFont;
 
         Vector2i cacheShapeSelection;
+        Vector2f cacheLassoSelection;
         Vector2f cacheBrushPosition;
+        Vector2f cacheColorSwapPosition;
         bool hasStartedBrush = false;
         bool hasStartedBucket = false;
         bool hasStartedWand = false;
+        bool hasStartedColorSwap = false;
+        bool hasStartedShape = false;
+        bool hasStartedText = false;
+        int32_t lassoSelectVertexCount = 0;
+        VertexArray lassoSelectArea;
         Vector2f scrollBarScroll = Vector2f(0, 1);
         Vector2i prevPanPos;
         Vector2f cameraOriginalPos;
@@ -108,11 +130,13 @@ namespace glxy
         Time lastRenderPass;
         Vector2f mousePosPrevFrame = Vector2f();
         bool forceToolChange = false;
+        bool wantInput = false;
 
-        ImageEditor(const AppSettings& settings, Window& window, const vector<PopUpState>& popUpState, unique_ptr<Cursor>& cursor,
-                    Cursor::Type& cursorType, const ColorPicker& colorPicker, const ImGuiID& dockID,
-                    const ToolPicker& toolPicker, LayerPicker& layerPicker, const Texture& gizmoIcons, const Font& mainFont,
-                    const ChunkManager& chunkManager, const ImageEditorWorkerCommon& common, int16_t arrayID);
+        ImageEditor(const AppSettings& settings, Window& window, const vector<PopUpState>& popUpState,
+                    const ColorPicker& colorPicker, const ImGuiID& dockID, const ToolPicker& toolPicker,
+                    LayerPicker& layerPicker, const Texture& gizmoIcons, const Font& mainFont,
+                    const ChunkManager& chunkManager, const ImageEditorWorkerCommon& common, int16_t arrayID,
+                    bool infiniteSize, const shared_ptr<Font>& textFont);
 
         void FinishCreation();
         bool Save();
@@ -122,7 +146,7 @@ namespace glxy
         void UpdateEditorTextures();
         void Update();
         void Draw();
-        void DrawChunkManager(RenderTarget& target) const;
+        void DrawChunkManager(RenderTarget& target);
         void DrawPixelSelect(RenderTarget& target) const;
         template <typename T>
         void AddWork(const T& work);
@@ -130,6 +154,7 @@ namespace glxy
         void OptionZoomIn(bool basedOnMouse);
         void OptionZoomOut(bool basedOnMouse);
         void OptionGrid(bool state);
+        void OptionGridBold(Vector2i size);
         void OptionRuler(bool state);
         void OptionActualSize();
         void OptionSetBrushSize(float radius);
@@ -137,19 +162,22 @@ namespace glxy
         Vector2u getSize() const;
 
         float getBestFitSize() const;
-        bool anyEditorUIElementSelected() const;
+        bool anyEditorUIElementHovered() const;
         string getImageName() const;
-        ImVec4 getUsedColor() const;
+        Color32f getUsedColor() const;
 
         bool ReadPixel(Vector2f pos, Color& color) const;
-        bool ReadPixel(Vector2f pos, ImVec4& color) const;
+        bool ReadPixel(Vector2f pos, Color32f& color) const;
 
         void ResetMovePixels();
         void FinishMovePixels();
-        void SetupMovePixelsUI(Vector2i size);
+
+        void SetupMovePixelsUI(Vector2f size);
+        void UpdateShapeUIPosition();
+        void UpdateTextUIPosition();
 
         void setThemeColor();
-        void setCursorType(Cursor::Type cursorType) const;
+
         void RecreateEditorTexture();
         void UpdateLayerPreview() const;
         void setNewView(Vector2f center, float scale);

@@ -29,6 +29,7 @@ namespace glxy
         EditorID hoveredImageEditor = -1;
 
         unique_ptr<Image> clipboardImage;
+        unique_ptr<Image> clipboardSelection;
         Vector2u clipboardLocation;
 
         ImGuiID mainDockID = 0;
@@ -41,14 +42,15 @@ namespace glxy
         ToolPicker _toolPicker;
         LayerPicker _layerPicker;
 
-        unique_ptr<Cursor> cursor;
-        Cursor::Type cursorType = Cursor::Type::Arrow;
         AppSettings settings;
         AdjustmentSettings adjSettings;
         EffectSettings effSettings;
 
         string mainFontData;
         Font mainFont;
+
+        shared_ptr<Font> textFont;
+        string textString;
 
         bool changeFont = false;
         Tool changeToTool = Tool::Count;
@@ -58,9 +60,15 @@ namespace glxy
         Clock pdo;
         Texture canvasIcons;
         Texture layerIcons;
+        Texture textIcons;
         Texture toolIcons;
         Texture setupSelect;
         Texture gizmoIcons;
+        Texture finalizeIcons;
+        Texture shapeTextures;
+        Texture menuIcons;
+
+        vector<filesystem::path> fontPaths;
 
         filesystem::path openWithGalaxyFile = "";
         bool openWithGalaxy = false;
@@ -71,29 +79,91 @@ namespace glxy
         App();
         ~App();
         bool hasUnsavedImages() const;
-        void ExitApp(bool windowClose);
         void DeleteEditor(EditorID ID);
         void AddRecentFile(const filesystem::path& file);
-        void setCursorType(Cursor::Type cursorType);
         template <typename T>
         void AddWork(const T& work);
         template <typename T>
         void AddWorkAndWait(const T& work);
 
+        bool MenuItem(const char* label, Vector2u iconID, const char* shortcut = nullptr, bool selected = false, bool enabled = true) const;
+        bool BeginMenu(const char* label, Vector2u iconID, bool enabled = true) const;
+
         void Start(const filesystem::path& filename, bool openWithGalaxy, const Clock& startUpTimer);
+        void LoadFonts();
+        void LoadShapes();
         void RecreateAppWindow();
-        void CreateEmptyImage(Vector2u resolution, Color color);
+        void CreateEmptyImage(Vector2u resolution, bool infiniteSize, Color color);
         void RescaleWindow(Vector2u size);
         void TitleBar();
         void SubTitleBar();
         void PopUp();
         void MainWindow();
-        void UpdateRenderWorker() const;
         void setActiveEditor(EditorID ID);
         void setHoveredEditor(EditorID ID);
         void app();
         void OpenImage(const filesystem::path& fileName);
         bool SaveImage();
+
+        void MenuNew();
+        void MenuOpen();
+        void MenuSave();
+        void MenuSaveAs();
+        void MenuExit(bool windowClose);
+        void MenuCopy();
+        void MenuCut();
+        void MenuPaste();
+        void MenuSelectAll();
+        void MenuSelectLeft();
+        void MenuSelectRight();
+        void MenuSelectTop();
+        void MenuSelectBottom();
+        void MenuSelectTopLeft();
+        void MenuSelectTopRight();
+        void MenuSelectBottomLeft();
+        void MenuSelectBottomRight();
+        void MenuDeselectAll();
+        void MenuDelete();
+        void MenuZoomIn();
+        void MenuZoomOut();
+        void MenuGrid();
+        void MenuGridBold();
+        void MenuRuler();
+        void MenuActualSize();
+        void MenuSyncViewport();
+        void MenuCrop();
+        void MenuResize();
+        void MenuResizeCanvas();
+        void MenuFlipImageHorizontal();
+        void MenuFlipImageVertical();
+        void MenuRotate90CW();
+        void MenuRotate90CCW();
+        void MenuRotate180();
+        void MenuTransformImage();
+        void MenuNewLayer();
+        void MenuDeleteLayer();
+        void MenuDuplicateLayer();
+        void MenuMoveLayerUp();
+        void MenuMoveLayerDown();
+        void MenuMergeLayerDown();
+        void MenuFlipLayerHorizontal();
+        void MenuFlipLayerVertical();
+        void MenuLayerProperties();
+        void MenuAdjustBlackAndWhite();
+        void MenuAdjustBrightnessContrast();
+        void MenuAdjustHSV();
+        void MenuAdjustInvert();
+        void MenuAdjustTint();
+        void MenuEffectGauss();
+        void MenuEffectBox();
+        void MenuEffectDirectional();
+        void MenuEffectWhite();
+        void MenuEffectFractal();
+        void MenuChangelog();
+        void MenuFuturePlan();
+        void MenuGLScan();
+        void MenuDebug();
+        void MenuAbout();
     };
 
     template <typename T>
