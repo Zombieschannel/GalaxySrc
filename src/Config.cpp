@@ -1,11 +1,11 @@
-#include "AppSettings.hpp"
+#include "Config.hpp"
 #include "Global.hpp"
 #include "ZEditorsCommon/Languages.hpp"
 #include "Namespace.hpp"
 #include "ZEditorsCommon/Shortcuts.hpp"
 #include "ZEditorsCommon/ZTB.hpp"
 
-void glxy::AppSettings::Save() const
+void glxy::Config::Save() const
 {
     JSON file;
     file.setValue("theme", GLOBAL.themeID);
@@ -27,6 +27,7 @@ void glxy::AppSettings::Save() const
     file.setValue("aspectResize", maintainAspectResize);
     file.setValue("aspectCanvas", maintainAspectCanvas);
     file.setValue("resamplingMethod", resamplingMethod);
+    file.setValue("transformSamplingSmooth", transformSamplingSmooth);
     file.setValue("brushRadius", brushRadius);
     file.setValue("eraserRadius", eraserRadius);
     file.setValue("shapeRadius", shapeRadius);
@@ -39,7 +40,10 @@ void glxy::AppSettings::Save() const
     file.setValue("showGrid", showGrid);
     file.setValue("showRuler", showRuler);
     file.setValue("drawSelectionLines", drawSelectionLines);
-    file.setValue("panMouseButton", panMouseButton);
+    file.setValue("middleMouseButton", middleMouseButton);
+    file.setValue("extra1MouseButton", extra1MouseButton);
+    file.setValue("extra2MouseButton", extra2MouseButton);
+    file.setValue("thumbnailCacheSizeLimit", thumbnailCacheSizeLimit);
     file.setValue("colorPickerTriangle", colorPickerTriangle);
     file.setValue("debugMode", debugMode);
     file.setValue("gridBoldX", gridBold.x);
@@ -70,7 +74,7 @@ void glxy::AppSettings::Save() const
     file.saveToFile("sett.json");
 }
 
-void glxy::AppSettings::Load()
+void glxy::Config::Load()
 {
     JSON file;
     if (file.loadFromFile("sett.json"))
@@ -94,6 +98,7 @@ void glxy::AppSettings::Load()
         file.loadValue("aspectResize", maintainAspectResize);
         file.loadValue("aspectCanvas", maintainAspectCanvas);
         file.loadValue("resamplingMethod", resamplingMethod);
+        file.loadValue("transformSamplingSmooth", transformSamplingSmooth);
         file.loadValue("brushRadius", brushRadius);
         file.loadValue("eraserRadius", eraserRadius);
         file.loadValue("shapeRadius", shapeRadius);
@@ -106,7 +111,10 @@ void glxy::AppSettings::Load()
         file.loadValue("showGrid", showGrid);
         file.loadValue("showRuler", showRuler);
         file.loadValue("drawSelectionLines", drawSelectionLines);
-        file.loadValue("panMouseButton", panMouseButton);
+        file.loadValue("middleMouseButton", middleMouseButton);
+        file.loadValue("extra1MouseButton", extra1MouseButton);
+        file.loadValue("extra2MouseButton", extra2MouseButton);
+        file.loadValue("thumbnailCacheSizeLimit", thumbnailCacheSizeLimit);
         file.loadValue("colorPickerTriangle", colorPickerTriangle);
         file.loadValue("debugMode", debugMode);
         file.loadValue("gridBoldX", gridBold.x);
@@ -133,7 +141,8 @@ void glxy::AppSettings::Load()
             string data;
             file.loadValue("recentFile_" + to_string(i), data);
             file.loadValue("recentFile_" + to_string(i) + "_ID", ID);
-            recentFiles.emplace(ID, data);
+            if (filesystem::exists(data))
+                recentFiles.emplace(ID, data);
         }
 
         for (int8_t i = 0; i < static_cast<int32_t>(ActionShortcut::Count); i++)
@@ -145,4 +154,10 @@ void glxy::AppSettings::Load()
         }
         LL::setLanguageID(languageID);
     }
+}
+
+glxy::Config& glxy::Config::get()
+{
+    static Config config;
+    return config;
 }

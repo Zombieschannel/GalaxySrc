@@ -20,11 +20,14 @@ public:
         SizeRight,
         SizeBottom,
         Text,
+        Hand,
         SelectRect,
         SelectCircle,
         SelectLasso,
         Pencil,
         Picker,
+        Brush,
+        Eraser,
         Count
     };
 private:

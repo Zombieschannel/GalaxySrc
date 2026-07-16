@@ -11,9 +11,9 @@ void glxy::RenderShapes::makeRectangle(vector<Vector2f>& pos)
 
 void glxy::RenderShapes::makeRoundedRectangle(vector<Vector2f>& pos, const Vector2i size, const float radius)
 {
-    const float curve = fminf(radius, fminf(fabsf(size.x) / 2.f, fabsf(size.y) / 2.f));
-    const int16_t edgePoints = max(c_PI * sqrtf(curve) / 2.f, 10.f);
-    const Vector2f radiusRatio = Vector2f(curve / fabsf(size.x), curve / fabsf(size.y));
+    const float curve = std::min(radius, std::min(std::abs(size.x) / 2.f, std::abs(size.y) / 2.f));
+    const int16_t edgePoints = std::max(c_PI * sqrtf(curve) / 2.f, 10.f);
+    const Vector2f radiusRatio = Vector2f(curve / std::abs(size.x), curve / std::abs(size.y));
     pos.resize(4 * (edgePoints + 1));
     for (int8_t i = 0; i < 4; i++)
     {
@@ -40,7 +40,7 @@ void glxy::RenderShapes::makeRoundedRectangle(vector<Vector2f>& pos, const Vecto
 
 void glxy::RenderShapes::makeCircle(vector<Vector2f>& pos, const Vector2i size)
 {
-    pos.resize(fmaxf(2 * c_PI * sqrtf(fabsf(fmaxf(size.x, size.y))), 20.f));
+    pos.resize(fmaxf(2 * c_PI * sqrtf(std::abs(fmaxf(size.x, size.y))), 20.f));
     for (int16_t i = 0; i < pos.size(); i++)
         pos.at(i) = Vector2f(cosf(2 * c_PI / pos.size() * i) * 0.5f + 0.5f,
             sinf(2 * c_PI / pos.size() * i) * 0.5f + 0.5f);
@@ -124,7 +124,7 @@ void glxy::RenderShapes::makeArrow(vector<Vector2f>& pos)
 
 void glxy::RenderShapes::makeHeart(vector<Vector2f>& pos, const Vector2i size)
 {
-    const int16_t heartPartPoints = fmaxf(c_PI * sqrtf(fmaxf(fabsf(size.x), fabsf(size.y))), 20.f);
+    const int16_t heartPartPoints = fmaxf(c_PI * sqrtf(fmaxf(std::abs(size.x), std::abs(size.y))), 20.f);
     pos.resize(heartPartPoints * 2 + 1);
     const float offset = (1 - cosf(0.6f)) / 4.f;
     for (int16_t i = 0; i < heartPartPoints; i++)
@@ -154,7 +154,7 @@ void glxy::RenderShapes::makeBolt(vector<Vector2f>& pos)
 
 void glxy::RenderShapes::makeSpade(vector<Vector2f>& pos, const Vector2i size)
 {
-    const int16_t circlePartPoints = fmaxf(c_PI * sqrtf(fmaxf(fabsf(size.x), fabsf(size.y))), 20.f);
+    const int16_t circlePartPoints = fmaxf(c_PI * sqrtf(fmaxf(std::abs(size.x), std::abs(size.y))), 20.f);
     pos.resize(circlePartPoints * 2 + 3);
     const float offset = (1 - cosf(0.5f)) / 4.f;
     for (int16_t i = 0; i < circlePartPoints; i++)
@@ -174,7 +174,7 @@ void glxy::RenderShapes::makeSpade(vector<Vector2f>& pos, const Vector2i size)
 
 void glxy::RenderShapes::makeClub(vector<Vector2f>& pos, const Vector2i size)
 {
-    const int16_t circlePartPoints = fmaxf(c_PI * 1.5f * sqrtf(fmaxf(fabsf(size.x), fabsf(size.y))), 20.f);
+    const int16_t circlePartPoints = fmaxf(c_PI * 1.5f * sqrtf(fmaxf(std::abs(size.x), std::abs(size.y))), 20.f);
     pos.resize(3 * circlePartPoints + 2);
 
     for (int16_t i = 0; i < circlePartPoints; i++)

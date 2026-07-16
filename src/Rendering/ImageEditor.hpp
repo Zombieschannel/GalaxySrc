@@ -1,6 +1,6 @@
 #pragma once
 #include <SFML/Graphics.hpp>
-#include "../AppSettings.hpp"
+#include "../Config.hpp"
 #include "../Canvas/CanvasWorker.hpp"
 #include "../Namespace.hpp"
 #include "../UIElements/EditorUiElement.hpp"
@@ -31,7 +31,8 @@ namespace glxy
         View view;
         float windowScale = 0;
         View viewUI;
-        RenderTexture texture;
+        RenderTexture coreTexture;
+        RenderTexture UITexture;
         GridLines gridLines;
         RulerUI rulerUI;
         ChunkTextureManager chunkTextureManager;
@@ -40,9 +41,11 @@ namespace glxy
         LayerPicker& _layerPicker;
         const ColorPicker& _colorPicker;
         Tool currentTool = Tool::Pencil;
-        array<Color32f, c_colorCount> currentColor;
-
+        Tool toolBeforeMouseSwitch = Tool::Count;
+        bool switchBackPanZoomTool = false;
+        array<Color32f, 2> currentColor;
         Texture transparentLayer;
+
         bool viewHovered = false;
         bool windowFocused = false;
         bool windowHovered = false;
@@ -51,6 +54,8 @@ namespace glxy
         bool initComplete = false;
         bool unsavedChanges = false;
         bool chunksUpToDate = false;
+        bool needsCoreGraphicsUpdate = true;
+        bool needsUIGraphicsUpdate = true;
 
         FloatRect viewArea;
         FloatRect windowArea;
@@ -98,7 +103,7 @@ namespace glxy
         EditorUIElement moveSelectionMoveArea;
         vector<EditorUIElement> moveSelectionPoints;
 
-        const AppSettings& settings;
+        const Config& config = Config::get();
         const vector<PopUpState>& popUpState;
         Window& window;
         const Texture& gizmoIcons;
@@ -109,17 +114,21 @@ namespace glxy
         Vector2i cacheShapeSelection;
         Vector2f cacheLassoSelection;
         Vector2f cacheBrushPosition;
+        Vector2f cachePencilPosition;
         Vector2f cacheColorSwapPosition;
+        Vector2f cacheGradientPosition;
+        bool hasStartedZoom = false;
+        bool hasStartedPencil = false;
         bool hasStartedBrush = false;
         bool hasStartedBucket = false;
         bool hasStartedWand = false;
         bool hasStartedColorSwap = false;
         bool hasStartedShape = false;
         bool hasStartedText = false;
+        bool lastWorkerToolState = false;
         int32_t lassoSelectVertexCount = 0;
         VertexArray lassoSelectArea;
         Vector2f scrollBarScroll = Vector2f(0, 1);
-        Vector2i prevPanPos;
         Vector2f cameraOriginalPos;
         Vector2f cameraTargetPos;
         Vector2f cameraOriginalSize;
@@ -127,12 +136,14 @@ namespace glxy
         bool cameraAnimationRunning = false;
         Time cameraAnimation;
         Time moveViewHitRate;
-        Time lastRenderPass;
-        Vector2f mousePosPrevFrame = Vector2f();
+        std::optional<Vector2f> mousePosPrevFrame;
+        std::optional<Vector2i> mouseScreenPosPrevFrame;
+        int32_t zoomMouseStartPosX;
         bool forceToolChange = false;
+        bool forceToolNoChange = false;
         bool wantInput = false;
 
-        ImageEditor(const AppSettings& settings, Window& window, const vector<PopUpState>& popUpState,
+        ImageEditor(Window& window, const vector<PopUpState>& popUpState,
                     const ColorPicker& colorPicker, const ImGuiID& dockID, const ToolPicker& toolPicker,
                     LayerPicker& layerPicker, const Texture& gizmoIcons, const Font& mainFont,
                     const ChunkManager& chunkManager, const ImageEditorWorkerCommon& common, int16_t arrayID,
@@ -141,11 +152,13 @@ namespace glxy
         void FinishCreation();
         bool Save();
 
+        void onResize();
         void UpdateZoom();
         void UpdateTool();
         void UpdateEditorTextures();
         void Update();
         void Draw();
+        void DrawUI();
         void DrawChunkManager(RenderTarget& target);
         void DrawPixelSelect(RenderTarget& target) const;
         template <typename T>

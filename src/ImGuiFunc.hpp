@@ -20,18 +20,15 @@ static void ToolTip(const string& text)
     }
 }
 
-static int TextCallback(ImGuiInputTextCallbackData* data)
+static int32_t TextCallback(ImGuiInputTextCallbackData* data)
 {
     switch (data->EventFlag)
     {
     case ImGuiInputTextFlags_CallbackResize:
         {
             string* str = static_cast<string*>(data->UserData);
-            if (str->size() != data->BufTextLen)
-            {
-                str->resize(data->BufTextLen);
-                data->Buf = &(*str)[0];
-            }
+            str->resize(data->BufTextLen);
+            data->Buf = str->data();
         }
         break;
     case ImGuiInputTextFlags_CallbackCompletion:

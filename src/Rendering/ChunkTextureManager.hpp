@@ -37,9 +37,9 @@ namespace glxy
         void AllocateChunkInfinite(ChunkID chunkID);
         void Update();
 
-        void RenderLQChunk(ChunkID chunkID, bool overrideWithTempLayer, LayerID layerID);
-        void RenderMQChunk(ChunkID chunkID, bool overrideWithTempLayer, LayerID layerID);
-        void RenderNQChunk(ChunkID chunkID, bool overrideWithTempLayer, LayerID layerID);
+        void RenderLQChunk(ChunkID chunkID, bool overwriteWithTempLayer, LayerID layerID, bool skipLayer);
+        void RenderMQChunk(ChunkID chunkID, bool overwriteWithTempLayer, LayerID layerID, bool skipLayer);
+        void RenderNQChunk(ChunkID chunkID, bool overwriteWithTempLayer, LayerID layerID, bool skipLayer);
         void MakeSelectionChunk(ChunkID chunkID);
         void MakeSelectionTempChunk(ChunkID chunkID);
         void MakeNQSmooth(ChunkID chunkID, bool state) const;

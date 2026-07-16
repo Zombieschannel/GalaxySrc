@@ -79,35 +79,34 @@ void EditorUIElement::setSelectColor(const Color selectColor)
     this->selectColor = selectColor;
 }
 
-void EditorUIElement::Update(const RenderTarget& target, const Vector2f mousePos, const Vector2f mousePosUI)
+bool EditorUIElement::Update(const RenderTarget& target, const Vector2f mousePos, const Vector2f mousePosUI)
 {
     if (!ElementSync::isThisActive(ID) && ElementSync::isAnyActive())
-        return;
+        return false;
 
     const bool anyPressed = InputEvent::isButtonPressed(Mouse::Button::Left) || InputEvent::isButtonPressed(Mouse::Button::Right) ||
             InputEvent::isTouchPressed(0);
     const Vector2f pos = getCalculatedTransform(target).transformPoint(Vector2f());
     changed = false;
     moveDelta = Vector2f();
+    const bool prevHovered = hovered;
     hovered = (type == UIElementType::Drag && Distance::Point_Point(mousePosUI, pos) < c_UIElementSize / 2.f ||
         (type == UIElementType::Move || type == UIElementType::Rotate) && FloatRect(pos - Vector2f(1.f, 1.f) * c_UIElementSize, Vector2f(2.f, 2.f) * c_UIElementSize).contains(mousePosUI) ||
         type == UIElementType::Area && FloatRect(Vector2f(-0.5f, -0.5f), Vector2f(1, 1)).contains(getCalculatedTransform(target).getInverse().transformPoint(mousePos)));
     if (!anyPressed)
     {
+        const bool thisWasActive = ElementSync::isThisActive(ID);
         lastMousePos = mousePos;
         ElementSync::setNoneActive();
-        return;
+        return prevHovered != hovered || thisWasActive;
     }
     if (!ElementSync::isAnyActive() && hovered)
     {
         ElementSync::setThisActive(ID);
-
         changed = true;
     }
     else if (ElementSync::isThisActive(ID) && mousePos != lastMousePos)
-    {
         changed = true;
-    }
     if (changed)
     {
         moveDelta = mousePos - lastMousePos;
@@ -129,7 +128,7 @@ void EditorUIElement::Update(const RenderTarget& target, const Vector2f mousePos
                 if (!disableXAxis && (moveDelta.x > 1 || moveDelta.x < -1))
                 {
                     changed = true;
-                    moveDelta.x = truncf(moveDelta.x);
+                    moveDelta.x = std::trunc(moveDelta.x);
                     lastMousePos.x += moveDelta.x;
                     move(Vector2f(moveDelta.x, 0));
                 }
@@ -138,7 +137,7 @@ void EditorUIElement::Update(const RenderTarget& target, const Vector2f mousePos
                 if (!disableYAxis && (moveDelta.y > 1 || moveDelta.y < -1))
                 {
                     changed = true;
-                    moveDelta.y = truncf(moveDelta.y);
+                    moveDelta.y = std::trunc(moveDelta.y);
                     lastMousePos.y += moveDelta.y;
                     move(Vector2f(0, moveDelta.y));
                 }
@@ -154,7 +153,7 @@ void EditorUIElement::Update(const RenderTarget& target, const Vector2f mousePos
                 if (!disableXAxis && (transformedMoveDelta.x > 1 || transformedMoveDelta.x < -1))
                 {
                     changed = true;
-                    moveDelta.x = truncf(transformedMoveDelta.x);
+                    moveDelta.x = std::trunc(transformedMoveDelta.x);
                     const Vector2f moveTransformed = transform.transformPoint(Vector2f(moveDelta.x, 0));
                     lastMousePos += moveTransformed;
                     move(moveTransformed);
@@ -164,7 +163,7 @@ void EditorUIElement::Update(const RenderTarget& target, const Vector2f mousePos
                 if (!disableYAxis && (transformedMoveDelta.y > 1 || transformedMoveDelta.y < -1))
                 {
                     changed = true;
-                    moveDelta.y = truncf(transformedMoveDelta.y);
+                    moveDelta.y = std::trunc(transformedMoveDelta.y);
                     const Vector2f moveTransformed = transform.transformPoint(Vector2f(0, moveDelta.y));
                     lastMousePos += moveTransformed;
                     move(moveTransformed);
@@ -181,6 +180,7 @@ void EditorUIElement::Update(const RenderTarget& target, const Vector2f mousePos
     }
     if (!moveInPixels)
         lastMousePos = mousePos;
+    return prevHovered != hovered || changed;
 }
 
 void EditorUIElement::draw(RenderTarget& target, RenderStates states) const
@@ -188,7 +188,7 @@ void EditorUIElement::draw(RenderTarget& target, RenderStates states) const
     if (type == UIElementType::Area)
         return;
 
-    const float offset = 1.f / static_cast<float>(UIElementType::Count) * static_cast<float>(type);
+    const float offset = 0.1f * static_cast<float>(type);
     float size = 0.5f;
     if (type == UIElementType::Move || type == UIElementType::Rotate)
         size = 0.75f;
@@ -201,11 +201,11 @@ void EditorUIElement::draw(RenderTarget& target, RenderStates states) const
 
     const array arr = {
         Vertex{ tran.transformPoint(Vector2f(-c_UIElementSize, -c_UIElementSize) * size), selectColor,
-            Vector2f(0.f + offset, 0.f) },
+            Vector2f(0.f + offset, 0.75f) },
         Vertex{ tran.transformPoint(Vector2f(c_UIElementSize, -c_UIElementSize) * size), selectColor,
-            Vector2f(1.f / static_cast<float>(UIElementType::Count) + offset, 0.f) },
+            Vector2f(0.1f + offset, 0.75f) },
         Vertex{ tran.transformPoint(Vector2f(c_UIElementSize, c_UIElementSize) * size), selectColor,
-            Vector2f(1.f / static_cast<float>(UIElementType::Count) + offset, 1.f) },
+            Vector2f(0.1f + offset, 1.f) },
         Vertex{ tran.transformPoint(Vector2f(-c_UIElementSize, c_UIElementSize) * size), selectColor,
             Vector2f(0.f + offset, 1.f) },
     };

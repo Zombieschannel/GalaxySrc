@@ -5,56 +5,55 @@
 #include "../Global.hpp"
 #include "../ZEditorsCommon/ZTB.hpp"
 
-ColorPicker::ColorPicker(const Window& window, const float& GUIScale, const bool& rulerEnabled, const bool& colorPickerTriangle)
-    : window(window), GUIScale(GUIScale), rulerEnabled(rulerEnabled), colorPickerTriangle(colorPickerTriangle)
+glxy::ColorPicker::ColorPicker(const Window& window, const Texture& texture)
+    : window(window), texture(texture)
 {
     colors.at(0) = Color32f(0, 0, 0, 1);
-    if (c_colorCount > 1)
-        colors.at(1) = Color32f(1, 1, 1, 1);
-    for (int8_t i = 0; i < c_colorCount; i++)
+    colors.at(1) = Color32f(1, 1, 1, 1);
+    for (int8_t i = 0; i < colors.size(); i++)
         oldColors.at(i) = colors.at(i);
 
 }
 
-Color32f ColorPicker::getColor(const ColorID colorID) const
+Color32f glxy::ColorPicker::getColor(const ColorID colorID) const
 {
     return colors.at(colorID);
 }
 
-Color32f ColorPicker::getEditingColor() const
+Color32f glxy::ColorPicker::getEditingColor() const
 {
     return colors.at(editingColor);
 }
 
-int8_t ColorPicker::getEditingColorID() const
+int8_t glxy::ColorPicker::getEditingColorID() const
 {
     return editingColor;
 }
 
-bool ColorPicker::hasColorChanged() const
+bool glxy::ColorPicker::hasColorChanged() const
 {
     return colorChanged;
 }
 
-void ColorPicker::setColor(const ColorID colorID, const Color32f& color)
+void glxy::ColorPicker::setColor(const ColorID colorID, const Color32f& color)
 {
     colors.at(colorID) = color;
     colorChanged = true;
 }
 
-void ColorPicker::setEditorColors(const ColorID colorID, const Color32f& color)
+void glxy::ColorPicker::setEditorColors(const ColorID colorID, const Color32f& color)
 {
     colors.at(colorID) = color;
 }
 
-void ColorPicker::Draw()
+void glxy::ColorPicker::Draw()
 {
     colorChanged = false;
     if (!windowOpen)
         return;
 
-    const Vector2f windowSize = Vector2f(310.f * powf(GUIScale, 0.9f), 390.f * powf(GUIScale, 0.8f));
-    ImGui::SetNextWindowPos(Vector2f((11 + c_rulerSize * rulerEnabled) * GUIScale, window.getSize().y - 40 * GUIScale - windowSize.y));
+    const Vector2f windowSize = Vector2f(320.f, 380.f) * config.GUIScale;
+    ImGui::SetNextWindowPos(Vector2f((5 + c_rulerSize * config.showRuler) * config.GUIScale, window.getSize().y - 40 * config.GUIScale - windowSize.y));
     ImGui::SetNextWindowSize(windowSize);
 
     const ImVec4 t = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
@@ -71,45 +70,46 @@ void ColorPicker::Draw()
     }
 
     ImGui::PushStyleVarX(ImGuiStyleVar_ItemSpacing, 2);
-    if (c_colorCount == 2)
+    ImGui::PushStyleColor(ImGuiCol_Button, editingColor == 0 ? active : notActive);
+    if (ImGui::Button("Primary"_C, Vector2f(ImGui::GetContentRegionAvail().x / 2 - 30 * config.GUIScale - 12.5f * config.GUIScale, 25 * config.GUIScale)))
+        editingColor = 0;
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+    if (ImGui::ColorButton("Primary preview"_C, colors.at(0), ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_AlphaPreview, Vector2f(25, 25) * config.GUIScale))
+        editingColor = 0;
+    ImGui::SameLine();
+    if (ImGui::ImageButton("Swap"_C, texture.getNativeHandle(), Vector2f(16, 16) * config.GUIScale,
+        Vector2f(0.2f, 0.5f), Vector2f(0.3f, 0.75f)))
     {
-        ImGui::PushStyleColor(ImGuiCol_Button, editingColor == 0 ? active : notActive);
-        if (ImGui::Button("Primary color"_C, Vector2f(ImGui::GetContentRegionAvail().x / 2 - 30 * GUIScale, 25 * GUIScale)))
-            editingColor = 0;
-        ImGui::PopStyleColor();
-
-        ImGui::SameLine();
-        if (ImGui::ColorButton("Primary preview"_C, colors.at(0), ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_AlphaPreview, Vector2f(25 * GUIScale, 25 * GUIScale)))
-            editingColor = 0;
-        ImGui::SameLine();
-
-        ImGui::PushStyleColor(ImGuiCol_Button, editingColor == 1 ? active : notActive);
-        if (ImGui::Button("Secondary color"_C, Vector2f(ImGui::GetContentRegionAvail().x - 30 * GUIScale, 25 * GUIScale)))
-            editingColor = 1;
-        ImGui::PopStyleColor();
-
-        ImGui::SameLine();
-        if (ImGui::ColorButton("Secondary preview"_C, colors.at(1), ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_AlphaPreview, Vector2f(25 * GUIScale, 25 * GUIScale)))
-            editingColor = 1;
-        ImGui::Spacing();
+        std::swap(this->colors.at(0), this->colors.at(1));
+        colorChanged = true;
     }
+    ImGui::SameLine();
+
+    ImGui::PushStyleColor(ImGuiCol_Button, editingColor == 1 ? active : notActive);
+    if (ImGui::Button("Secondary"_C, Vector2f(ImGui::GetContentRegionAvail().x - 30 * config.GUIScale, 25 * config.GUIScale)))
+        editingColor = 1;
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+    if (ImGui::ColorButton("Secondary preview"_C, colors.at(1), ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_AlphaPreview, Vector2f(25, 25) * config.GUIScale))
+        editingColor = 1;
+    ImGui::Spacing();
     ImGui::PopStyleVar();
-    if (ImGui::BeginChild("Scroll", Vector2f(0, -75 * GUIScale), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+    if (ImGui::BeginChild("Scroll", Vector2f(0, -75 * config.GUIScale), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
     {
-        if (c_colorCount == 2)
+        if (editingColor == 0)
         {
-            if (editingColor == 0)
-            {
-                if (ImGui::ColorPicker4(("Primary"_S + "##Color").c_str(), &colors.at(0).r, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview |
-                    (colorPickerTriangle ? ImGuiColorEditFlags_PickerHueWheel : ImGuiColorEditFlags_PickerHueBar), &oldColors.at(0).r))
-                    colorChanged = true;
-            }
-            else if (editingColor == 1)
-            {
-                if (ImGui::ColorPicker4(("Secondary"_S + "##Color").c_str(), &colors.at(1).r, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview |
-                    (colorPickerTriangle ? ImGuiColorEditFlags_PickerHueWheel : ImGuiColorEditFlags_PickerHueBar), &oldColors.at(1).r))
-                    colorChanged = true;
-            }
+            if (ImGui::ColorPicker4(("Primary"_S + "##Color").c_str(), &colors.at(0).r, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview |
+                (config.colorPickerTriangle ? ImGuiColorEditFlags_PickerHueWheel : ImGuiColorEditFlags_PickerHueBar), &oldColors.at(0).r))
+                colorChanged = true;
+        }
+        else if (editingColor == 1)
+        {
+            if (ImGui::ColorPicker4(("Secondary"_S + "##Color").c_str(), &colors.at(1).r, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview |
+                (config.colorPickerTriangle ? ImGuiColorEditFlags_PickerHueWheel : ImGuiColorEditFlags_PickerHueBar), &oldColors.at(1).r))
+                colorChanged = true;
         }
     }
     ImGui::EndChild();
@@ -120,8 +120,8 @@ void ColorPicker::Draw()
     {
         float saturation = 1.f;
         float alpha = 1.f;
-        float value;
-        float change;
+        float value = 0;
+        float change = 0;
         switch (j)
         {
         case 0:
@@ -177,21 +177,18 @@ void ColorPicker::Draw()
             const Color32f color = Color32f(targetColors.at(i));
             ImGui::ColorButton(("Color " + to_string(i + j * (colors + specialColors))).c_str(), color,
                 ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder | ImGuiColorEditFlags_AlphaPreview,
-                Vector2f(itemSize.x, min(itemSize.x, itemSize.y)));
-            if (c_colorCount == 2)
+                Vector2f(itemSize.x, std::min(itemSize.x, itemSize.y)));
+            if (ImGui::IsItemHovered() && (InputEvent::isButtonReleased(Mouse::Button::Left) || InputEvent::isTouchReleased(0)))
             {
-                if (ImGui::IsItemHovered() && InputEvent::isButtonReleased(Mouse::Button::Left))
-                {
-                    editingColor = 0;
-                    this->colors.at(0) = color;
-                    colorChanged = true;
-                }
-                if (ImGui::IsItemHovered() && InputEvent::isButtonReleased(Mouse::Button::Right))
-                {
-                    editingColor = 1;
-                    this->colors.at(1) = color;
-                    colorChanged = true;
-                }
+                editingColor = 0;
+                this->colors.at(0) = color;
+                colorChanged = true;
+            }
+            if (ImGui::IsItemHovered() && InputEvent::isButtonReleased(Mouse::Button::Right))
+            {
+                editingColor = 1;
+                this->colors.at(1) = color;
+                colorChanged = true;
             }
             if (i != (colors + specialColors) - 1)
                 ImGui::SameLine(0, -1);

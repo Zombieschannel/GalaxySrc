@@ -20,12 +20,12 @@ namespace stb
 
 const int32_t c_transparentAreaSize = 100;
 
-glxy::ImageEditor::ImageEditor(const AppSettings& settings, Window& window, const vector<PopUpState>& popUpState,
+glxy::ImageEditor::ImageEditor(Window& window, const vector<PopUpState>& popUpState,
                                const ColorPicker& colorPicker, const ImGuiID& dockID, const ToolPicker& toolPicker, LayerPicker& layerPicker,
                                const Texture& gizmoIcons, const Font& mainFont, const ChunkManager& chunkManager, const ImageEditorWorkerCommon& common,
                                const int16_t arrayID, const bool infiniteSize, const shared_ptr<Font>& textFont)
-    : settings(settings), window(window), popUpState(popUpState), _layerPicker(layerPicker), dockID(dockID),
-        _toolPicker(toolPicker), gizmoIcons(gizmoIcons), rulerUI(view, settings.GUIScale, mainFont), chunkManager(chunkManager),
+    : window(window), popUpState(popUpState), _layerPicker(layerPicker), dockID(dockID),
+        _toolPicker(toolPicker), gizmoIcons(gizmoIcons), rulerUI(view, mainFont), chunkManager(chunkManager),
         animCenter(view, Color(128, 128, 128, 64)), animOutline(view, Color(0, 0, 0, 255)), common(common), arrayID(arrayID),
         chunkTextureManager(layerPicker, chunkManager), _colorPicker(colorPicker), isInfinite(infiniteSize), textFont(textFont), text(*textFont)
 {
@@ -33,10 +33,10 @@ glxy::ImageEditor::ImageEditor(const AppSettings& settings, Window& window, cons
     editorID = index++;
 
     gridLines.Start();
-    gridLines.setEnabled(settings.showGrid);
-    gridLines.setBold(settings.gridBold);
+    gridLines.setEnabled(config.showGrid);
+    gridLines.setBold(config.gridBold);
     rulerUI.Start();
-    rulerUI.setEnabled(settings.showRuler);
+    rulerUI.setEnabled(config.showRuler);
 
     gradientStart.Start(UIElementType::Drag, false, false, false, view, viewUI, gizmoIcons);
     gradientEnd.Start(UIElementType::Drag, false, false, false, view, viewUI, gizmoIcons);
@@ -92,7 +92,7 @@ glxy::ImageEditor::ImageEditor(const AppSettings& settings, Window& window, cons
     squareOuterOutline.setFillColor(Color::Transparent);
     squareOuterOutline.setSize(Vector2f(1.f, 1.f));
 
-    for (int8_t i = 0; i < c_colorCount; i++)
+    for (int8_t i = 0; i < currentColor.size(); i++)
         currentColor.at(i) = colorPicker.getColor(i);
 
     Image transparent;
@@ -133,8 +133,8 @@ bool glxy::ImageEditor::Save()
 
 void glxy::ImageEditor::Draw()
 {
-    texture.clearStencil(0x00);
-    texture.setView(view);
+    coreTexture.clearStencil(0x00);
+    coreTexture.setView(view);
     {//draw transparency
         const Vertex tran[4] = {
             Vertex{ Vector2f(0, 0), Color::White },
@@ -142,7 +142,7 @@ void glxy::ImageEditor::Draw()
             Vertex{ Vector2f(getSize()), Color::White },
             Vertex{ Vector2f(0, getSize().y), Color::White },
         };
-        texture.draw(tran, 4, PrimitiveType::TriangleFan, RenderStates(BlendNone,
+        coreTexture.draw(tran, 4, PrimitiveType::TriangleFan, RenderStates(BlendNone,
         {StencilComparison::Always, StencilUpdateOperation::Increment, StencilValue(0x1), 0xFF, true},
             Transform::Identity, CoordinateType::Normalized, nullptr, nullptr));
 
@@ -152,79 +152,86 @@ void glxy::ImageEditor::Draw()
             Vertex{ Vector2f(1, 1), Color::White, Vector2f(c_transparentAreaSize, c_transparentAreaSize) },
             Vertex{ Vector2f(0, 1), Color::White, Vector2f(0, c_transparentAreaSize) },
         };
-        texture.setView(viewUI);
-        texture.draw(tran2, 4, PrimitiveType::TriangleFan, RenderStates(BlendNone,
+        coreTexture.setView(viewUI);
+        coreTexture.draw(tran2, 4, PrimitiveType::TriangleFan, RenderStates(BlendNone,
     {StencilComparison::Equal, StencilUpdateOperation::Keep, StencilValue(0x1), 0xFF, false},
             Transform::Identity, CoordinateType::Normalized, &transparentLayer, nullptr));
     }
-    texture.setView(view);
-    DrawChunkManager(texture);
-    DrawPixelSelect(texture);
-    if (windowScale < 0.25f)
-        texture.draw(gridLines);
+    coreTexture.setView(view);
+    DrawChunkManager(coreTexture);
+}
+
+void glxy::ImageEditor::DrawUI()
+{
+    UITexture.setView(view);
+    DrawPixelSelect(UITexture);
 
     //UI
-    if (viewHovered)
+    if (windowScale < 0.25f)
+        UITexture.draw(gridLines);
+
+    if (viewHovered && mousePosPrevFrame.has_value())
     {
         if (currentTool == Tool::Brush || currentTool == Tool::Eraser || currentTool == Tool::ColorSwap)
         {
             brushOuterOutline.setPosition(Vector2f(getCursorPos(viewArea, view, window)));
-            texture.draw(brushOuterOutline);
-            texture.draw(brushInnerOutline);
+            UITexture.draw(brushOuterOutline);
+            UITexture.draw(brushInnerOutline);
         }
         if (windowScale < 0.25f)
         {
             if (currentTool == Tool::Pencil || currentTool == Tool::Picker)
             {
-                texture.draw(squareOuterOutline);
-                texture.draw(squareInnerOutline);
+                UITexture.draw(squareOuterOutline);
+                UITexture.draw(squareInnerOutline);
             }
         }
     }
     if (lock_guard lock(common.mtxEditorWorkerCommon);
-        currentTool == Tool::Bucket && common.getBucketFill())
+        common.getBucketFill())
     {
-        texture.draw(squareOuterOutline);
-        texture.draw(squareInnerOutline);
-        texture.draw(bucketFillMove);
+        UITexture.draw(squareOuterOutline);
+        UITexture.draw(squareInnerOutline);
+        UITexture.draw(bucketFillMove);
     }
     if (lock_guard lock(common.mtxEditorWorkerCommon);
-        currentTool == Tool::MagicWand && common.getWandFill())
+        common.getWandFill())
     {
-        texture.draw(squareOuterOutline);
-        texture.draw(squareInnerOutline);
-        texture.draw(wandMove);
+        UITexture.draw(squareOuterOutline);
+        UITexture.draw(squareInnerOutline);
+        UITexture.draw(wandMove);
     }
-    if ((currentTool == Tool::MoveSelected || currentTool == Tool::MoveSelection) &&
-        (chunkManager.anyHasSelectionLayer() || chunkManager.anyHasSelectionTempLayer()))
+    if (lock_guard lock(common.mtxEditorWorkerCommon);
+        (currentTool == Tool::MoveSelected || currentTool == Tool::MoveSelection) &&
+        (!chunkManager.getFinalSelectionBounds().expired() || common.getNewMoveSelectArea() != IntRect()))
     {
         for (const EditorUIElement& n : moveSelectionPoints)
-            texture.draw(n);
-        texture.draw(moveSelectionMove);
-        texture.draw(moveSelectionRotate);
+            UITexture.draw(n);
+        UITexture.draw(moveSelectionMove);
+        UITexture.draw(moveSelectionRotate);
     }
     if (lock_guard lock(common.mtxEditorWorkerCommon);
         common.getGradientDraw())
     {
-        texture.draw(gradientStart);
-        texture.draw(gradientEnd);
-        texture.draw(gradientMove);
+        UITexture.draw(gradientStart);
+        UITexture.draw(gradientEnd);
+        UITexture.draw(gradientMove);
     }
     if (lock_guard lock(common.mtxEditorWorkerCommon);
         common.getShapeDraw())
     {
         for (const EditorUIElement& n : shapeSizePoints)
-            texture.draw(n);
-        texture.draw(shapeMove);
-        texture.draw(shapeRotate);
+            UITexture.draw(n);
+        UITexture.draw(shapeMove);
+        UITexture.draw(shapeRotate);
     }
     if (lock_guard lock(common.mtxEditorWorkerCommon);
         common.getTextDraw())
     {
-        texture.draw(textMove);
-        texture.draw(textRotate);
+        UITexture.draw(textMove);
+        UITexture.draw(textRotate);
     }
-    texture.draw(rulerUI);
+    UITexture.draw(rulerUI);
 }
 
 void glxy::ImageEditor::DrawChunkManager(RenderTarget& target)
@@ -237,7 +244,7 @@ void glxy::ImageEditor::DrawChunkManager(RenderTarget& target)
         chunkTextureManager.setDrawQuality(1);
     else
         chunkTextureManager.setDrawQuality(2);
-    chunkTextureManager.setDebugMode(settings.debugMode);
+    chunkTextureManager.setDebugMode(config.debugMode);
     target.draw(chunkTextureManager);
     chunkManager.mtxChunkVector.unlock();
 }
@@ -247,7 +254,9 @@ void glxy::ImageEditor::DrawPixelSelect(RenderTarget& target) const
     if (!chunkManager.mtxChunkVector.try_lock())
         return;
 
-    if (!chunkManager.anyHasSelectionLayer() && !chunkManager.anyHasSelectionTempLayer() && !chunkManager.hasStartedSelect())
+    if (lock_guard lock(common.mtxEditorWorkerCommon);
+        common.getNewMoveSelectArea() == IntRect() && chunkManager.getFinalSelectionBounds().expired() &&
+        !chunkManager.anyHasSelectionTempLayer() && !chunkManager.hasStartedSelect())
     {
         chunkManager.mtxChunkVector.unlock();
         return;
@@ -359,7 +368,7 @@ void glxy::ImageEditor::DrawPixelSelect(RenderTarget& target) const
 
     const IntRect bounds = IntRect({}, Vector2i(chunkManager.getSize()));
     Color selectColor = ImGui::GetStyleColorVec4(ImGuiCol_Button);
-    selectColor.a = 64;
+    selectColor.a = 96;
     const array v = {
         Vertex{Vector2f(bounds.position), selectColor},
         Vertex{Vector2f(bounds.position.x + bounds.size.x, bounds.position.y), selectColor},
@@ -387,7 +396,7 @@ void glxy::ImageEditor::DrawPixelSelect(RenderTarget& target) const
     default:
         break;
     }
-    if (settings.drawSelectionLines)
+    if (config.drawSelectionLines)
     {
         target.draw(animCenter, RenderStates(BlendAlpha,
             {StencilComparison::NotEqual, StencilUpdateOperation::Keep, 0x00, 0x0C, false},
@@ -528,7 +537,7 @@ void glxy::ImageEditor::OptionZoomIn(const bool basedOnMouse)
     {
         windowScale *= 1 / 1.3f;
         const Vector2f pos = getSFMLViewCursorPos(viewArea, view);
-        if (settings.animateZoom)
+        if (config.animateZoom)
         {
             cameraOriginalPos = view.getCenter();
             cameraOriginalSize = view.getSize();
@@ -543,11 +552,13 @@ void glxy::ImageEditor::OptionZoomIn(const bool basedOnMouse)
             ClampView();
         }
 
-        if (settings.animateZoom)
+        if (config.animateZoom)
         {
             cameraTargetPos = view.getCenter();
             cameraTargetSize = view.getSize();
         }
+        needsCoreGraphicsUpdate = true;
+        needsUIGraphicsUpdate = true;
     }
 }
 
@@ -557,7 +568,7 @@ void glxy::ImageEditor::OptionZoomOut(const bool basedOnMouse)
     {
         windowScale *= 1.3f;
         const Vector2f pos = getSFMLViewCursorPos(viewArea, view);
-        if (settings.animateZoom)
+        if (config.animateZoom)
         {
             cameraOriginalPos = view.getCenter();
             cameraOriginalSize = view.getSize();
@@ -571,17 +582,20 @@ void glxy::ImageEditor::OptionZoomOut(const bool basedOnMouse)
             view.move(pos - getSFMLViewCursorPos(viewArea, view));
             ClampView();
         }
-        if (settings.animateZoom)
+        if (config.animateZoom)
         {
             cameraTargetPos = view.getCenter();
             cameraTargetSize = view.getSize();
         }
+        needsCoreGraphicsUpdate = true;
+        needsUIGraphicsUpdate = true;
     }
 }
 
 void glxy::ImageEditor::OptionGrid(const bool state)
 {
     gridLines.setEnabled(state);
+    needsUIGraphicsUpdate = true;
 }
 
 void glxy::ImageEditor::OptionGridBold(const Vector2i size)
@@ -600,6 +614,8 @@ void glxy::ImageEditor::OptionActualSize()
     windowScale = 1.f;
     view.setSize({ viewArea.size.x, viewArea.size.y});
     view.setCenter(Vector2f(getSize().x / 2.f, getSize().y / 2.f));
+    needsCoreGraphicsUpdate = true;
+    needsUIGraphicsUpdate = true;
 }
 
 void glxy::ImageEditor::OptionSetBrushSize(const float radius)
@@ -620,8 +636,8 @@ float glxy::ImageEditor::getBestFitSize() const
     if (isInfinite)
         return 1.f;
 
-    return (static_cast<float>(getSize().x) / getSize().y) > (viewArea.size.x - c_rulerSize * settings.showRuler) / (viewArea.size.y  - c_rulerSize * settings.showRuler) ?
-        (viewArea.size.x - c_rulerSize * settings.showRuler) / getSize().x : (viewArea.size.y - c_rulerSize * settings.showRuler) / getSize().y;
+    return (static_cast<float>(getSize().x) / getSize().y) > (viewArea.size.x - c_rulerSize * config.showRuler) / (viewArea.size.y  - c_rulerSize * config.showRuler) ?
+        (viewArea.size.x - c_rulerSize * config.showRuler) / getSize().x : (viewArea.size.y - c_rulerSize * config.showRuler) / getSize().y;
 }
 
 bool glxy::ImageEditor::ReadPixel(const Vector2f pos, Color& color) const
@@ -729,7 +745,10 @@ Color32f glxy::ImageEditor::getUsedColor() const
 
 void glxy::ImageEditor::RecreateEditorTexture()
 {
-    validate(texture.resize(Vector2u(texture.getSize().x, texture.getSize().y), {0, 8, settings.antialiasing}));
+    validate(coreTexture.resize(Vector2u(coreTexture.getSize().x, coreTexture.getSize().y), {0, 8, config.antialiasing}));
+    validate(UITexture.resize(Vector2u(UITexture.getSize().x, UITexture.getSize().y), {0, 8, config.antialiasing}));
+    needsCoreGraphicsUpdate = true;
+    needsUIGraphicsUpdate = true;
 }
 
 void glxy::ImageEditor::UpdateLayerPreview() const
@@ -740,8 +759,8 @@ void glxy::ImageEditor::UpdateLayerPreview() const
         return;
     Image temp;
     temp.resize(Vector2u(c_layerPreviewTextureSize, c_layerPreviewTextureSize));
-    const uint32_t maxVal = max(getSize().x, getSize().y);
-    const uint32_t minVal = min(getSize().x, getSize().y);
+    const uint32_t maxVal = std::max(getSize().x, getSize().y);
+    const uint32_t minVal = std::min(getSize().x, getSize().y);
     const float scale = static_cast<float>(maxVal) / c_layerPreviewTextureSize;
     const float emptyAreaSize = (maxVal - minVal) / 2.f;
     for (int8_t x = 0; x < c_layerPreviewTextureSize; x++)
@@ -766,7 +785,7 @@ void glxy::ImageEditor::UpdateLayerPreview() const
 
 void glxy::ImageEditor::setNewView(const Vector2f center, const float scale)
 {
-    if (settings.animateZoom)
+    if (config.animateZoom)
     {
         cameraOriginalPos = view.getCenter();
         cameraOriginalSize = view.getSize();
@@ -778,16 +797,18 @@ void glxy::ImageEditor::setNewView(const Vector2f center, const float scale)
     view.setCenter(center);
     view.setSize({ viewArea.size.x * windowScale, viewArea.size.y * windowScale });
 
-    if (settings.animateZoom)
+    if (config.animateZoom)
     {
         cameraTargetPos = view.getCenter();
         cameraTargetSize = view.getSize();
     }
+    needsCoreGraphicsUpdate = true;
+    needsUIGraphicsUpdate = true;
 }
 
 void glxy::ImageEditor::MoveView(const Vector2f offset)
 {
-    if (settings.animatePan)
+    if (config.animatePan)
     {
         cameraOriginalPos = view.getCenter();
         cameraOriginalSize = view.getSize();
@@ -811,11 +832,13 @@ void glxy::ImageEditor::MoveView(const Vector2f offset)
         view.move(offset);
 
     ClampView();
+    needsCoreGraphicsUpdate = true;
+    needsUIGraphicsUpdate = true;
 }
 
 void glxy::ImageEditor::setViewPosition(const Vector2f position)
 {
-    if (settings.animatePan)
+    if (config.animatePan)
     {
         cameraOriginalPos = view.getCenter();
         cameraOriginalSize = view.getSize();
@@ -838,11 +861,13 @@ void glxy::ImageEditor::setViewPosition(const Vector2f position)
     else
         view.setCenter(position);
     ClampView();
+    needsCoreGraphicsUpdate = true;
+    needsUIGraphicsUpdate = true;
 }
 
 void glxy::ImageEditor::setViewPositionX(const float position)
 {
-    if (settings.animatePan)
+    if (config.animatePan)
         setViewPosition(Vector2f(position, cameraTargetPos.y));
     else
         setViewPosition(Vector2f(position, view.getCenter().y));
@@ -850,7 +875,7 @@ void glxy::ImageEditor::setViewPositionX(const float position)
 
 void glxy::ImageEditor::setViewPositionY(const float position)
 {
-    if (settings.animatePan)
+    if (config.animatePan)
         setViewPosition(Vector2f(cameraTargetPos.x, position));
     else
         setViewPosition(Vector2f(view.getCenter().x, position));

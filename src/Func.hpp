@@ -57,10 +57,10 @@ Rect<T> getUnion(const Rect<T>* rect1, const Rect<T>* rect2)
     if (rect1 && rect2)
     {
         Vector2i minPos, maxPos;
-        minPos.x = min(rect1->position.x, rect2->position.x);
-        minPos.y = min(rect1->position.y, rect2->position.y);
-        maxPos.x = max(rect1->position.x + rect1->size.x, rect2->position.x + rect2->size.x);
-        maxPos.y = max(rect1->position.y + rect1->size.y, rect2->position.y + rect2->size.y);
+        minPos.x = std::min(rect1->position.x, rect2->position.x);
+        minPos.y = std::min(rect1->position.y, rect2->position.y);
+        maxPos.x = std::max(rect1->position.x + rect1->size.x, rect2->position.x + rect2->size.x);
+        maxPos.y = std::max(rect1->position.y + rect1->size.y, rect2->position.y + rect2->size.y);
         return Rect<T>(minPos, maxPos - minPos);
     }
     if (rect1)
@@ -89,8 +89,8 @@ static Color32f LerpColor(const Color32f& color1, const Color32f& color2, float 
 
 static HSV32f toHSV32f(const Color32f& color)
 {
-    const float Cmax = fmaxf(color.r, fmaxf(color.g, color.b));
-    const float Cmin = fminf(color.r, fminf(color.g, color.b));
+    const float Cmax = std::max(color.r, std::max(color.g, color.b));
+    const float Cmin = std::min(color.r, std::min(color.g, color.b));
 
     const float delta = Cmax - Cmin;
 
@@ -99,7 +99,7 @@ static HSV32f toHSV32f(const Color32f& color)
         h = 0;
     else if (Cmax == color.r)
     {
-        h = 60.f * (fmodf((color.g - color.b) / delta, 6.f));
+        h = 60.f * (std::fmod((color.g - color.b) / delta, 6.f));
         if (h < 0.f)
             h += 360.f;
     }
@@ -127,7 +127,7 @@ static Color32f toColor32f(const HSV32f& hsv)
         return Color32f(hsv.v, hsv.v, hsv.v, hsv.a);
 
     const float c = hsv.v * hsv.s;
-    const float x = c * (1 - fabsf(fmodf(hsv.h / 60.f, 2) - 1));
+    const float x = c * (1 - std::abs(std::fmod(hsv.h / 60.f, 2) - 1));
     const float m = hsv.v - c;
     if (hsv.h >= 0 && hsv.h < 60.f)
         return Color32f(c + m, x + m, m, hsv.a);
@@ -154,13 +154,21 @@ static int32_t Binomial(const int32_t n, const int32_t k)
     return Binomial(n - 1, k - 1) + Binomial(n - 1, k);
 }
 
+static int32_t modneg(const int32_t a, const int32_t b)
+{
+    return (a % b + b) % b;
+}
+
+
 static uint8_t getBlendMode(const BlendMode& blendMode)
 {
     return std::find(c_blendModes.begin(), c_blendModes.end(), blendMode) -  c_blendModes.begin();
 }
 
-static void RenderLayerToTexture(const Image& layer, const Vector2u chunkSize, const uint8_t transparency, const RenderStates& states, RenderTexture& texture)
+static void RenderLayerToTexture(const Image* layer, const Vector2u chunkSize, const uint8_t transparency, const RenderStates& states, RenderTexture& texture)
 {
+    if (!layer)
+        return;
     const Color color = Color(255, 255, 255, transparency);
     const array arr = {
         Vertex{Vector2f(0, 0), color, Vector2f(0, 0)},
@@ -169,7 +177,7 @@ static void RenderLayerToTexture(const Image& layer, const Vector2u chunkSize, c
         Vertex{Vector2f(0, chunkSize.y), color, Vector2f(0, 1)},
     };
     Texture temp;
-    validate(temp.loadFromImage(layer));
+    validate(temp.loadFromImage(*layer));
     texture.draw(arr.data(), 4, PrimitiveType::TriangleFan, RenderStates(states.blendMode, states.stencilMode, Transform::Identity, CoordinateType::Normalized, &temp, nullptr));
 }
 

@@ -1,9 +1,9 @@
 #pragma once
+#include <SFML/System.hpp>
 #include <iostream>
 #include "resource.h"
-#include "../Namespace.hpp"
 class InternalResource
 {
 public:
-	static string getResource(int resource_id, const string& resource_class);
+	static std::shared_ptr<sf::InputStream> getResource(std::int32_t resource_id);
 };

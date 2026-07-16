@@ -22,5 +22,8 @@ enum class PopUpState
     ToolChanged,
     GridBold,
     Search,
+    Recent,
+    CircularShift,
+    SaveAdditional,
     Count,
 };

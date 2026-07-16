@@ -46,9 +46,9 @@ void glxy::ImageEditorWorker::ForEachChunkInChunkArea(const IntRect& area, const
 void glxy::ImageEditorWorker::ForEachPixelInChunkArea(const IntRect& area, const bool lockChunks, const std::function<void(Vector2i)>& func) const
 {
     for (int32_t i = area.position.x / chunkManager.getChunkSize();
-        i < ceil(static_cast<float>(area.position.x + area.size.x) / chunkManager.getChunkSize()); i++)
+        i < std::ceil(static_cast<float>(area.position.x + area.size.x) / chunkManager.getChunkSize()); i++)
         for (int32_t j = area.position.y / chunkManager.getChunkSize();
-            j < ceil(static_cast<float>(area.position.y + area.size.y) / chunkManager.getChunkSize()); j++)
+            j < std::ceil(static_cast<float>(area.position.y + area.size.y) / chunkManager.getChunkSize()); j++)
         {
             if (lockChunks)
                 chunkManager.getChunkMutex(Vector2i(i, j)).lock();
@@ -78,7 +78,10 @@ void glxy::ImageEditorWorker::BeginSelect(const Vector2f pos, const SelectMode s
     if (!chunkManager.hasStartedSelect())
     {
         if (selectMode == SelectMode::Single)
+        {
+            newMoveSelectArea = IntRect();
             chunkManager.resetSelection();
+        }
         switch (type)
         {
         case ShapeSelectType::Box: case ShapeSelectType::Circle:
@@ -105,14 +108,14 @@ void glxy::ImageEditorWorker::BeginSelect(const Vector2f pos, const SelectMode s
                 if (vec.y == 0)
                     vec.y = 1;
                 int32_t limitSize = 0;
-                if (abs(vec.x) > abs(vec.y))
+                if (std::abs(vec.x) > std::abs(vec.y))
                 {
-                    vec.y = abs(vec.x) * vec.y / abs(vec.y);
+                    vec.y = std::abs(vec.x) * vec.y / std::abs(vec.y);
                     limitSize = vec.y > 0.f ? getSize().y - pixelSelectStartInt.y - 1 : pixelSelectStartInt.y;
                 }
                 else
                 {
-                    vec.x = abs(vec.y) * vec.x / abs(vec.x);
+                    vec.x = std::abs(vec.y) * vec.x / std::abs(vec.x);
                     limitSize = vec.x > 0.f ? getSize().x - pixelSelectStartInt.x - 1 : pixelSelectStartInt.x;
                 }
                 vec.x = std::clamp(vec.x, -limitSize, limitSize);
@@ -136,14 +139,17 @@ void glxy::ImageEditorWorker::BeginSelect(const Vector2f pos, const SelectMode s
     chunkManager.unlockAllChunks();
 }
 
-void glxy::ImageEditorWorker::EndSelect(const Vector2f pos, const ShapeSelectType type)
+void glxy::ImageEditorWorker::EndSelect(const Vector2f pos)
 {
     lock_guard lock(chunkManager.mtxChunkManager);
     if (!chunkManager.hasStartedSelect())
         return;
     chunkManager.lockAllChunks();
-    if (Distance::Point_Point(pixelSelectStart, pos) < 0.2f)
+    if (Distance::Point_Point(pixelSelectStart, pos) < 0.5f)
+    {
+        newMoveSelectArea = IntRect();
         chunkManager.resetSelection();
+    }
     else
         chunkManager.selectFinish();
     chunkManager.unlockAllChunks();
@@ -153,71 +159,90 @@ void glxy::ImageEditorWorker::SetupMovePixels()
 {
     assert(!chunkManager.getFinalSelectionBounds().expired());
     const IntRect bounds = *chunkManager.getFinalSelectionBounds().lock();
-    if (!colorBufferTemp)
-        colorBufferTemp = make_unique<Image>();
-    colorBufferTemp->resize(Vector2u(bounds.size), Color::Transparent);
-    if (!selectionBufferTemp)
-        selectionBufferTemp = make_unique<Image>();
-    selectionBufferTemp->resize(Vector2u(bounds.size), Color::Transparent);
+    if (!transformImageCache.colorBufferTemp)
+        transformImageCache.colorBufferTemp = make_unique<Image>();
+    transformImageCache.colorBufferTemp->resize(Vector2u(bounds.size), Color::Transparent);
+    if (!transformImageCache.selectionBufferTemp)
+        transformImageCache.selectionBufferTemp = make_unique<Image>();
+    transformImageCache.selectionBufferTemp->resize(Vector2u(bounds.size), Color::Transparent);
 
     const std::optional<IntRect> intersection = bounds.findIntersection(IntRect(Vector2i(0, 0), Vector2i(getSize())));
     if (intersection)
     {
         chunkManager.lockAllChunks();
         Vector2u dummy;
-        chunkManager.CopySelectedColorPixels(*colorBufferTemp, dummy, workingLayer);
+        chunkManager.CopySelectedColorPixels(*transformImageCache.colorBufferTemp, dummy, workingLayer);
+        transformImageCache.requiresUpdateColor = true;
+
         ForEachPixelInChunkArea(*chunkManager.getFinalSelectionBounds().lock(), false, [&](const Vector2i coord)
         {
             if (chunkManager.getPixelSelection(coord))
                 chunkManager.setPixelColor(coord, Color::Transparent, workingLayer);
         });
-        chunkManager.CopyImage(*selectionBufferTemp, Vector2i(intersection->position - bounds.position), *intersection, ImageLayerType::Selection);
+        chunkManager.CopyImage(*transformImageCache.selectionBufferTemp, Vector2i(intersection->position - bounds.position), *intersection, ImageLayerType::Selection);
+        transformImageCache.requiresUpdateSelection = true;
         chunkManager.unlockAllChunks();
     }
 }
 
-void glxy::ImageEditorWorker::MovePixels(const Transform& transform)
+void glxy::ImageEditorWorker::MovePixels(const Transform& transform, const bool smooth)
 {
-    if (!colorBufferTemp || !selectionBufferTemp)
+    if (!transformImageCache.colorBufferTemp || !transformImageCache.selectionBufferTemp)
         return;
-    {
-        lock_guard lock(chunkManager.mtxChunkManager);
-        chunkManager.lockAllChunks();
-        if (!chunkManager.allHaveColorTempLayer())
-            chunkManager.createColorTempLayerAll(getBlendMode(BlendAlpha));
-        else
-            chunkManager.clearColorTempLayerAll(Color::Transparent);
-        chunkManager.clearSelectionLayerAll(false);
-        chunkManager.unlockAllChunks();
-    }
-    const IntRect rect = TransformImage(transform, false, false);
+    const IntRect rect = TransformImage(transform, 1, smooth, false);
 
     lock_guard lock(mtxEditorWorkerCommon);
+    if (newMoveSelectArea != IntRect())
+    {
+        if (const std::optional<IntRect> area = newMoveSelectArea.findIntersection(IntRect(Vector2i(0, 0), Vector2i(getSize()))))
+        {
+            ForEachChunkInChunkArea(*area, [&](const ChunkID chunkID)
+            {
+                if (IntRect(Vector2i(chunkID.x * chunkManager.getChunkSize(), chunkID.y * chunkManager.getChunkSize()),
+                    Vector2i(chunkManager.getChunkSize(chunkID))).findIntersection(rect))
+                    return;
+
+                chunkManager.getChunkMutex(chunkID).lock();
+                if (chunkManager.hasSelectionLayer(chunkID))
+                    chunkManager.clearSelectionLayer(false, chunkID);
+                if (chunkManager.hasColorTempLayer(chunkID))
+                    chunkManager.clearColorTempLayer(Color::Transparent, chunkID);
+                chunkManager.getChunkMutex(chunkID).unlock();
+            });
+        }
+    }
     newMoveSelectArea = rect;
 }
 
 void glxy::ImageEditorWorker::CancelMovePixels(const IntRect& area)
 {
-    const std::optional<IntRect> intersection = area.findIntersection(IntRect(Vector2i(0, 0), Vector2i(getSize())));
+    const std::optional<IntRect> intersection = area.findIntersection(
+        IntRect(Vector2i(0, 0), Vector2i(getSize())));
     if (intersection)
     {
         chunkManager.lockAllChunks();
-        if (chunkManager.anyHasSelectionLayer())
+        if (!chunkManager.getFinalSelectionBounds().expired())
         {
-            chunkManager.clearSelectionLayerAll(false);
-            chunkManager.PasteImage(*selectionBufferTemp, Vector2i(intersection->position), IntRect(intersection->position - area.position, intersection->size), ImageLayerType::Selection);
-            chunkManager.PasteSelectedColorPixels(*colorBufferTemp, workingLayer);
+            chunkManager.ForEachChunkID([&](const ChunkID chunkID)
+            {
+                if (!chunkManager.hasSelectionLayer(chunkID))
+                    chunkManager.createSelectionLayer(chunkID);
+                else
+                    chunkManager.clearSelectionLayer(false, chunkID);
+            });
+            chunkManager.PasteImage(*transformImageCache.selectionBufferTemp, Vector2i(intersection->position), IntRect(intersection->position - area.position, intersection->size), ImageLayerType::Selection);
+            chunkManager.PasteSelectedColorPixels(*transformImageCache.colorBufferTemp, workingLayer);
         }
         else
-            chunkManager.PasteImage(*colorBufferTemp, Vector2i(), IntRect(), ImageLayerType::Color, workingLayer);
+            chunkManager.PasteImage(*transformImageCache.colorBufferTemp, Vector2i(), IntRect(), ImageLayerType::Color, workingLayer);
         chunkManager.unlockAllChunks();
     }
     chunkManager.lockAllChunks();
     chunkManager.deleteColorTempLayerAll();
     chunkManager.unlockAllChunks();
 
-    selectionBufferTemp.reset();
-    colorBufferTemp.reset();
+    transformImageCache.selectionBufferTemp.reset();
+    transformImageCache.colorBufferTemp.reset();
 }
 
 void glxy::ImageEditorWorker::FinishMovePixels(const IntRect& area)
@@ -228,49 +253,61 @@ void glxy::ImageEditorWorker::FinishMovePixels(const IntRect& area)
         {
             if (x < 0 || y < 0 || x >= getSize().x || y >= getSize().y)
                 continue;
-            if (chunkManager.anyHasSelectionLayer() && !chunkManager.getPixelSelection(Vector2i(x, y)))
+            if ((newMoveSelectArea != IntRect() || !chunkManager.getFinalSelectionBounds().expired()) && !chunkManager.getPixelSelection(Vector2i(x, y)))
                 continue;
             chunkManager.setPixelColor(Vector2i(x, y), chunkManager.getPixelColorTemp(Vector2i(x, y)), workingLayer);
         }
-    if (chunkManager.anyHasSelectionLayer())
+    if (!chunkManager.getFinalSelectionBounds().expired() || newMoveSelectArea != IntRect())
         chunkManager.setNewSelectionBounds(area);
     chunkManager.deleteColorTempLayerAll();
     chunkManager.unlockAllChunks();
 
-    selectionBufferTemp.reset();
-    colorBufferTemp.reset();
+    transformImageCache.selectionBufferTemp.reset();
+    transformImageCache.colorBufferTemp.reset();
 }
 
 void glxy::ImageEditorWorker::SetupMoveSelection()
 {
     assert(!chunkManager.getFinalSelectionBounds().expired());
     const IntRect bounds = *chunkManager.getFinalSelectionBounds().lock();
-    if (!selectionBufferTemp)
-        selectionBufferTemp = make_unique<Image>();
-    selectionBufferTemp->resize(Vector2u(bounds.size), Color::Transparent);
+    if (!transformImageCache.selectionBufferTemp)
+        transformImageCache.selectionBufferTemp = make_unique<Image>();
+    transformImageCache.selectionBufferTemp->resize(Vector2u(bounds.size), Color::Transparent);
 
     const std::optional<IntRect> intersection = bounds.findIntersection(IntRect(Vector2i(0, 0), Vector2i(getSize())));
     if (intersection)
     {
         chunkManager.lockAllChunks();
-        chunkManager.CopyImage(*selectionBufferTemp, Vector2i(intersection->position - bounds.position), *intersection, ImageLayerType::Selection);
+        chunkManager.CopyImage(*transformImageCache.selectionBufferTemp, Vector2i(intersection->position - bounds.position), *intersection, ImageLayerType::Selection);
+        transformImageCache.requiresUpdateSelection = true;
         chunkManager.unlockAllChunks();
     }
 }
 
 void glxy::ImageEditorWorker::MoveSelection(const Transform& transform)
 {
-    if (!selectionBufferTemp)
+    if (!transformImageCache.selectionBufferTemp)
         return;
-    {
-        lock_guard lock(chunkManager.mtxChunkManager);
-        chunkManager.lockAllChunks();
-        chunkManager.clearSelectionLayerAll(false);
-        chunkManager.unlockAllChunks();
-    }
-    const IntRect rect = TransformImage(transform, false, true);
+    const IntRect rect = TransformImage(transform, 1, false, true);
 
     lock_guard lock(mtxEditorWorkerCommon);
+    if (newMoveSelectArea != IntRect())
+    {
+        if (const std::optional<IntRect> area = newMoveSelectArea.findIntersection(IntRect(Vector2i(0, 0), Vector2i(getSize()))))
+        {
+            ForEachChunkInChunkArea(*area, [&](const ChunkID chunkID)
+            {
+                if (IntRect(Vector2i(chunkID.x * chunkManager.getChunkSize(), chunkID.y * chunkManager.getChunkSize()),
+                    Vector2i(chunkManager.getChunkSize(chunkID))).findIntersection(rect))
+                    return;
+
+                chunkManager.getChunkMutex(chunkID).lock();
+                if (chunkManager.hasSelectionLayer(chunkID))
+                    chunkManager.clearSelectionLayer(false, chunkID);
+                chunkManager.getChunkMutex(chunkID).unlock();
+            });
+        }
+    }
     newMoveSelectArea = rect;
 }
 
@@ -280,12 +317,18 @@ void glxy::ImageEditorWorker::CancelMoveSelection(const IntRect& area)
     if (intersection)
     {
         chunkManager.lockAllChunks();
-        chunkManager.clearSelectionLayerAll(false);
-        chunkManager.PasteImage(*selectionBufferTemp, Vector2i(intersection->position), IntRect(intersection->position - area.position, intersection->size), ImageLayerType::Selection);
+        chunkManager.ForEachChunkID([&](const ChunkID chunkID)
+        {
+            if (!chunkManager.hasSelectionLayer(chunkID))
+                chunkManager.createSelectionLayer(chunkID);
+            else
+                chunkManager.clearSelectionLayer(false, chunkID);
+        });
+        chunkManager.PasteImage(*transformImageCache.selectionBufferTemp, Vector2i(intersection->position), IntRect(intersection->position - area.position, intersection->size), ImageLayerType::Selection);
         chunkManager.unlockAllChunks();
     }
 
-    selectionBufferTemp.reset();
+    transformImageCache.selectionBufferTemp.reset();
 }
 
 void glxy::ImageEditorWorker::FinishMoveSelection(const IntRect& area)
@@ -294,51 +337,180 @@ void glxy::ImageEditorWorker::FinishMoveSelection(const IntRect& area)
     chunkManager.setNewSelectionBounds(area);
     chunkManager.unlockAllChunks();
 
-    selectionBufferTemp.reset();
+    transformImageCache.selectionBufferTemp.reset();
+    transformImageCache.requiresUpdateSelection = true;
 }
 
-IntRect glxy::ImageEditorWorker::TransformImage(const Transform& transform, const bool tile, const bool selectionOnly)
+IntRect glxy::ImageEditorWorker::TransformImage(const Transform& transform, const int16_t repeat, const bool smooth, const bool selectionOnly)
 {
-    const Vector2u sourceSize = selectionOnly ? selectionBufferTemp->getSize() : colorBufferTemp->getSize();
-    const FloatRect area = FloatRect(Vector2f(), Vector2f(sourceSize));
-    FloatRect transformedArea;
-    if (!tile)
-        transformedArea = transform.transformRect(area);
-    else
-        transformedArea = area;
-    const Transform inverse = transform.getInverse();
+    const Vector2u sourceSize = selectionOnly ? transformImageCache.selectionBufferTemp->getSize() : transformImageCache.colorBufferTemp->getSize();
+    const FloatRect area = FloatRect(Vector2f(), Vector2f(sourceSize.x, sourceSize.y));
+    Transform temp = transform;
+    const FloatRect transformedArea = temp.scale(Vector2f(repeat, repeat), Vector2f(sourceSize) / 2.f).transformRect(area);
 
-    chunkManager.lockAllChunks();
-    const bool selectAll = !chunkManager.anyHasSelectionLayer() && !chunkManager.anyHasSelectionTempLayer();
+    const IntRect chunkArea = IntRect(Vector2i(
+        std::max(std::round(transformedArea.position.x), 0.f),
+        std::max(std::round(transformedArea.position.y), 0.f)),
+        Vector2i(std::min(std::round(transformedArea.size.x), getSize().x - std::max(std::round(transformedArea.position.x), 0.f)),
+            std::min(std::round(transformedArea.size.y), getSize().y - std::max(std::round(transformedArea.position.y), 0.f))));
 
-    for (int32_t x = max(roundf(transformedArea.position.x), 0.f);
-        x < min(roundf(transformedArea.position.x + transformedArea.size.x), static_cast<float>(getSize().x)); x++)
-        for (int32_t y = max(roundf(transformedArea.position.y), 0.f);
-            y < min(roundf(transformedArea.position.y + transformedArea.size.y), static_cast<float>(getSize().y)); y++)
+    constexpr int8_t c_cornerOffset = 4;
+    constexpr uint16_t c_bufferChunkSize = c_maxChunkWorkableSize - c_cornerOffset;
+
+    if (transformImageCache.colorBufferTemp)
+    {
+        if (transformImageCache.requiresUpdateColor)
         {
-            if (x < 0 || y < 0 || x >= getSize().x || y >= getSize().y)
-                continue;
-            const Vector2f pos = inverse.transformPoint(Vector2f(x + 0.5f, y + 0.5f));
-            if (!selectAll && (pos.x < 0 || pos.y < 0 || pos.x >= sourceSize.x || pos.y >= sourceSize.y || selectionBufferTemp->getPixel(Vector2u(pos)) == Color::Transparent))
-                continue;
-            if (!selectionOnly)
-            {
-                Color col = Color::Transparent;
-                if (tile && selectAll)
+            const Vector2u range = Vector2u(std::ceil(static_cast<float>(transformImageCache.colorBufferTemp->getSize().x) / (c_bufferChunkSize)),
+                std::ceil(static_cast<float>(transformImageCache.colorBufferTemp->getSize().y) / c_bufferChunkSize));
+            transformImageCache.colorBufferChunks.clear();
+            for (uint16_t x = 0; x < range.x; x++)
+                for (uint16_t y = 0; y < range.y; y++)
                 {
-                    const Vector2f tex = Vector2f(pos.x / sourceSize.x, pos.y / sourceSize.y);
-                    const Vector2u coords = Vector2u((tex.x - floor(tex.x)) * sourceSize.x, (tex.y - floor(tex.y)) * sourceSize.y);
-                    col = colorBufferTemp->getPixel(coords);
+                    transformImageCache.colorBufferChunks.emplace_back();
+                    transformImageCache.colorBufferChunks.back().first.position = Vector2i(x * c_bufferChunkSize, y * c_bufferChunkSize);
+                    transformImageCache.colorBufferChunks.back().first.size = Vector2i(c_bufferChunkSize, c_bufferChunkSize);
+                    if (x == range.x - 1)
+                        transformImageCache.colorBufferChunks.back().first.size.x = sourceSize.x % c_bufferChunkSize;
+                    if (y == range.y - 1)
+                        transformImageCache.colorBufferChunks.back().first.size.y = sourceSize.y % c_bufferChunkSize;
+
+                    const IntRect area = IntRect(
+                        transformImageCache.colorBufferChunks.back().first.position - Vector2i(c_cornerOffset / 2, c_cornerOffset / 2),
+                        transformImageCache.colorBufferChunks.back().first.size + Vector2i(c_cornerOffset, c_cornerOffset));
+
+                    validate(transformImageCache.colorBufferChunks.back().second.loadFromImage(*transformImageCache.colorBufferTemp, false,
+                        *area.findIntersection(IntRect(Vector2i(0, 0), Vector2i(sourceSize)))));
                 }
-                else if (!(pos.x < 0 || pos.y < 0 || pos.x >= sourceSize.x || pos.y >= sourceSize.y))
-                    col = colorBufferTemp->getPixel(Vector2u(pos.x, pos.y));
-                chunkManager.setPixelColorTemp(Vector2i(x, y), col);
-            }
-            if (!selectAll)
-                chunkManager.setPixelSelection(Vector2i(x, y), true);
+            transformImageCache.requiresUpdateColor = false;
         }
-    chunkManager.unlockAllChunks();
-    return IntRect(Vector2i(round(transformedArea.position.x), round(transformedArea.position.y)), Vector2i(round(transformedArea.size.x), round(transformedArea.size.y)));
+        for (auto& n : transformImageCache.colorBufferChunks)
+        {
+            n.second.setRepeated(repeat > 1);
+            n.second.setSmooth(smooth);
+        }
+    }
+    if (transformImageCache.selectionBufferTemp && transformImageCache.requiresUpdateSelection)
+    {
+        const Vector2u range = Vector2u(std::ceil(static_cast<float>(transformImageCache.selectionBufferTemp->getSize().x) / c_bufferChunkSize),
+            std::ceil(static_cast<float>(transformImageCache.selectionBufferTemp->getSize().y) / c_bufferChunkSize));
+        transformImageCache.selectionBufferChunks.clear();
+        for (uint16_t x = 0; x < range.x; x++)
+            for (uint16_t y = 0; y < range.y; y++)
+            {
+                transformImageCache.selectionBufferChunks.emplace_back();
+                transformImageCache.selectionBufferChunks.back().first.position = Vector2i(x * c_bufferChunkSize, y * c_bufferChunkSize);
+                transformImageCache.selectionBufferChunks.back().first.size = Vector2i(c_bufferChunkSize, c_bufferChunkSize);
+                if (x == range.x - 1)
+                    transformImageCache.selectionBufferChunks.back().first.size.x = sourceSize.x % c_bufferChunkSize;
+                if (y == range.y - 1)
+                    transformImageCache.selectionBufferChunks.back().first.size.y = sourceSize.y % c_bufferChunkSize;
+
+                const IntRect area = IntRect(
+                    transformImageCache.selectionBufferChunks.back().first.position - Vector2i(c_cornerOffset / 2, c_cornerOffset / 2),
+                    transformImageCache.selectionBufferChunks.back().first.size + Vector2i(c_cornerOffset, c_cornerOffset));
+
+                validate(transformImageCache.selectionBufferChunks.back().second.loadFromImage(*transformImageCache.selectionBufferTemp, false,
+                    *area.findIntersection(IntRect(Vector2i(0, 0), Vector2i(sourceSize)))));
+            }
+        transformImageCache.requiresUpdateSelection = false;
+    }
+
+    RenderTexture renderTextureColor;
+    RenderTexture renderTextureSelect;
+    ForEachChunkInChunkArea(chunkArea, [&](const ChunkID chunkID)
+    {
+        const Vector2u chunkSize = chunkManager.getChunkSize(chunkID);
+        const uint16_t chunkGeneralSize = chunkManager.getChunkSize();
+
+        if (renderTextureColor.getSize() != chunkSize)
+            validate(renderTextureColor.resize(chunkSize, {0U, 0U, 0U}));
+        renderTextureColor.setView(View(FloatRect(Vector2f(chunkID.x * chunkGeneralSize, chunkID.y * chunkGeneralSize),
+            Vector2f(chunkSize))));
+
+        const auto renderAllChunks = [&](RenderTexture& target, const vector<pair<IntRect, Texture>>& chunks, RenderStates& states)
+        {
+            for (const auto& n : chunks)
+            {
+                if (!FloatRect(Vector2f(chunkID.x * chunkGeneralSize, chunkID.y * chunkGeneralSize), Vector2f(chunkSize)).findIntersection(
+                    transform.transformRect(FloatRect(n.first))))
+                {
+                    continue;
+                }
+
+                const std::optional<IntRect> areaToDraw = IntRect(n.first.position - Vector2i(c_cornerOffset / 2, c_cornerOffset / 2), n.first.size + Vector2i(c_cornerOffset, c_cornerOffset)).
+                    findIntersection(IntRect(Vector2i(0, 0), Vector2i(sourceSize)));
+
+                if (!areaToDraw)
+                {
+                    continue;
+                }
+
+                states.texture = &n.second;
+                const array quad = {
+                    Vertex{Vector2f(areaToDraw->position), Color::White, Vector2f(0, 0)},
+                    Vertex{Vector2f(areaToDraw->position) + Vector2f(areaToDraw->size.x, 0), Color::White, Vector2f(repeat, 0)},
+                    Vertex{Vector2f(areaToDraw->position) + Vector2f(areaToDraw->size), Color::White, Vector2f(repeat, repeat)},
+                    Vertex{Vector2f(areaToDraw->position) + Vector2f(0, areaToDraw->size.y), Color::White, Vector2f(0, repeat)},
+                };
+                target.draw(quad.data(), 4, PrimitiveType::TriangleFan, states);
+            }
+        };
+
+        if (!selectionOnly && transformImageCache.colorBufferTemp)
+        {
+            renderTextureColor.clear(Color::Transparent);
+
+            RenderStates states;
+            states.blendMode = BlendAlpha;
+            states.transform = transform;
+            states.coordinateType = CoordinateType::Normalized;
+            states.transform.scale(Vector2f(repeat, repeat), Vector2f(sourceSize) / 2.f);
+
+            renderAllChunks(renderTextureColor, transformImageCache.colorBufferChunks, states);
+            renderTextureColor.display();
+        }
+
+        if (renderTextureSelect.getSize() != chunkSize)
+            validate(renderTextureSelect.resize(chunkSize, {0U, 0U, 0U}));
+
+        renderTextureSelect.setView(View(FloatRect(Vector2f(chunkID.x * chunkGeneralSize, chunkID.y * chunkGeneralSize), Vector2f(chunkSize))));
+
+        if (transformImageCache.selectionBufferTemp)
+        {
+            renderTextureSelect.clear(Color::Transparent);
+
+            RenderStates states;
+            states.blendMode = BlendAlpha;
+            states.transform = transform;
+            states.coordinateType = CoordinateType::Normalized;
+
+            renderAllChunks(renderTextureSelect, transformImageCache.selectionBufferChunks, states);
+            renderTextureSelect.display();
+        }
+
+        chunkManager.getChunkMutex(chunkID).lock();
+        if (!selectionOnly && transformImageCache.colorBufferTemp)
+        {
+            if (!chunkManager.hasColorTempLayer(chunkID))
+                chunkManager.createColorTempLayer(getBlendMode(BlendAlpha), chunkID);
+
+            chunkManager.PasteImage(renderTextureColor.getTexture().copyToImage(), Vector2i(chunkID.x * chunkManager.getChunkSize(), chunkID.y * chunkManager.getChunkSize()),
+                IntRect(), ImageLayerType::ColorTemp);
+        }
+        if (transformImageCache.selectionBufferTemp)
+        {
+            if (!chunkManager.hasSelectionLayer(chunkID))
+                chunkManager.createSelectionLayer(chunkID);
+
+            chunkManager.PasteImage(renderTextureSelect.getTexture().copyToImage(), Vector2i(chunkID.x * chunkManager.getChunkSize(), chunkID.y * chunkManager.getChunkSize()),
+                IntRect(), ImageLayerType::Selection);
+
+        }
+        chunkManager.getChunkMutex(chunkID).unlock();
+    });
+    return IntRect(Vector2i(std::round(transformedArea.position.x), std::round(transformedArea.position.y)),
+        Vector2i(std::round(transformedArea.size.x), std::round(transformedArea.size.y)));
 }
 
 void glxy::ImageEditorWorker::SetupMaskedRendering(RenderTexture& renderTexture, const ChunkID chunkID) const
@@ -353,7 +525,7 @@ void glxy::ImageEditorWorker::SetupMaskedRendering(RenderTexture& renderTexture,
         glEnable(GL_ALPHA_TEST);
         glAlphaFunc(GL_GREATER, 0.5f);
 #endif
-        RenderLayerToTexture(*chunkManager.getChunkImageSelection(chunkID), chunkSize, 255, RenderStates(StencilMode{
+        RenderLayerToTexture(chunkManager.getChunkImageSelection(chunkID), chunkSize, 255, RenderStates(StencilMode{
                 StencilComparison::Always, StencilUpdateOperation::Increment, 0x01, 0xFF, true}), renderTexture);
 #ifdef GL_ALPHA_TEST
         glDisable(GL_ALPHA_TEST);
@@ -366,22 +538,88 @@ void glxy::ImageEditorWorker::InterpolatePixelLine(const Vector2f start, const V
     const Vector2f diff = Vector2f(end.x - start.x, end.y - start.y);
     out.clear();
     if (diff.x == 0 && diff.y == 0)
-        out.push_back(Vector2i(floorf(end.x), floorf(end.y)));
-    else if (fabs(diff.x) > fabs(diff.y))
+        out.push_back(Vector2i(std::floor(end.x), std::floor(end.y)));
+    else if (std::abs(diff.x) > std::abs(diff.y))
     {
-        const float offsetY = static_cast<float>(diff.y) / fabs(diff.x);
-        for (int32_t i = 0; i < fabs(diff.x); i++)
-            out.push_back(Vector2i(floorf(start.x + i * (diff.x / fabs(diff.x))), floorf(start.y + offsetY * i)));
+        const float offsetY = static_cast<float>(diff.y) / std::abs(diff.x);
+        for (int32_t i = 0; i < std::abs(diff.x); i++)
+            out.push_back(Vector2i(std::floor(start.x + i * (diff.x / std::abs(diff.x))), std::floor(start.y + offsetY * i)));
     }
     else
     {
         const float offsetX = static_cast<float>(diff.x) / fabs(diff.y);
-        for (int32_t i = 0; i < fabs(diff.y); i++)
-            out.push_back(Vector2i(floorf(start.x + offsetX * i), floorf(start.y + i * (diff.y / fabs(diff.y)))));
+        for (int32_t i = 0; i < std::abs(diff.y); i++)
+            out.push_back(Vector2i(std::floor(start.x + offsetX * i), std::floor(start.y + i * (diff.y / std::abs(diff.y)))));
     }
 }
 
-void glxy::ImageEditorWorker::PencilPixels(const Vector2f pos, const Vector2f prev, const Color color, const LayerID layerID)
+void glxy::ImageEditorWorker::ChunksInBrushLine(const Vector2f start, const Vector2f end, const float radius, vector<ChunkID>& out) const
+{
+    const float left = std::min(start.x, end.x);
+    const float top = std::min(start.y, end.y);
+    const float right = std::max(start.x, end.x);
+    const float bottom = std::max(start.y, end.y);
+
+    std::set<pair<int32_t, int32_t>> chunksToCheck;
+    const float distance = Distance::Point_Point(start, end);
+    Vector2f startPos = start;
+    const Vector2f dir = end - start;
+    if (distance == 0)
+    {
+        for (int32_t x = std::floor((left - radius) / chunkManager.getChunkSize());
+            x <= std::floor((right + radius) / chunkManager.getChunkSize()); x++)
+        {
+            if (!chunkManager.isInfinite() && (x < 0 || x >= chunkManager.getChunkCount().x))
+                continue;
+            for (int32_t y = std::floor((top - radius) / chunkManager.getChunkSize());
+                y <= std::floor((bottom + radius) / chunkManager.getChunkSize()); y++)
+            {
+                if (!chunkManager.isInfinite() && (y < 0 || y >= chunkManager.getChunkCount().y))
+                    continue;
+
+                if (chunkManager.chunkExists(ChunkID(x, y)) && !chunkManager.hasSelectionLayer(Vector2i(x, y)) &&
+                    (!chunkManager.getFinalSelectionBounds().expired() || newMoveSelectArea != IntRect()))
+                    continue;
+
+                chunksToCheck.emplace(x, y);
+            }
+        }
+    }
+    else
+    {
+        for (int32_t i = 0; i <= distance / chunkManager.getChunkSize() * 2; i++)
+        {
+            const Vector2f nextStart = (i == static_cast<int32_t>(distance / chunkManager.getChunkSize() * 2)) ?
+                end : startPos + dir.normalized() * (chunkManager.getChunkSize() / 2.f);
+            const float newLeft = std::min(startPos.x, nextStart.x) - radius;
+            const float newTop = std::min(startPos.y, nextStart.y) - radius;
+            const float newRight = std::max(startPos.x, nextStart.x) + radius;
+            const float newBottom = std::max(startPos.y, nextStart.y) + radius;
+
+            for (int32_t x = std::floor(newLeft / chunkManager.getChunkSize()); x <= std::floor(newRight / chunkManager.getChunkSize()); x++)
+            {
+                if (!chunkManager.isInfinite() && (x < 0 || x >= chunkManager.getChunkCount().x))
+                    continue;
+                for (int32_t y = std::floor(newTop / chunkManager.getChunkSize()); y <= std::floor(newBottom / chunkManager.getChunkSize()); y++)
+                {
+                    if (!chunkManager.isInfinite() && (y < 0 || y >= chunkManager.getChunkCount().y))
+                        continue;
+
+                    if (chunkManager.chunkExists(ChunkID(x, y)) && !chunkManager.hasSelectionLayer(Vector2i(x, y)) &&
+                        (!chunkManager.getFinalSelectionBounds().expired() || newMoveSelectArea != IntRect()))
+                        continue;
+
+                    chunksToCheck.emplace(x, y);
+                }
+            }
+            startPos = nextStart;
+        }
+    }
+    for (const auto& n : chunksToCheck)
+        out.emplace_back(n.first, n.second);
+}
+
+void glxy::ImageEditorWorker::PencilPixels(const Vector2f pos, const Vector2f prev, const Color color)
 {
     const FloatRect canvasBB = FloatRect({0.f, 0.f}, Vector2f(getSize().x, getSize().y));
 
@@ -392,18 +630,51 @@ void glxy::ImageEditorWorker::PencilPixels(const Vector2f pos, const Vector2f pr
     std::set<pair<int32_t, int32_t>> chunksToLock;
     vector<Vector2i> targetPixels;
     InterpolatePixelLine(prev, pos, targetPixels);
-    if (chunkManager.isInfinite())
+
+    if (!chunkManager.isInfinite())
+        for (int32_t i = 0; i < targetPixels.size(); i++)
+        {
+            const ChunkID chunkID = ChunkID(std::floor(static_cast<float>(targetPixels.at(i).x) / chunkManager.getChunkSize()),
+                std::floor(static_cast<float>(targetPixels.at(i).y) / chunkManager.getChunkSize()));
+
+            if (targetPixels.at(i).x >= 0 && targetPixels.at(i).x < getSize().x && targetPixels.at(i).y >= 0 && targetPixels.at(i).y < getSize().y &&
+                (chunkManager.hasSelectionLayer(chunkID) || (chunkManager.getFinalSelectionBounds().expired() && newMoveSelectArea == IntRect())))
+                continue;
+
+            targetPixels.erase(targetPixels.begin() + i);
+            i--;
+        }
+
+    for (const Vector2i& n : targetPixels)
     {
-        for (const Vector2i& n : targetPixels)
-            chunksToLock.emplace(static_cast<int32_t>(floor(static_cast<float>(n.x) / chunkManager.getChunkSize())),
-                static_cast<int32_t>(floor(static_cast<float>(n.y) / chunkManager.getChunkSize())));
-        for (const pair<int32_t, int32_t>& n : chunksToLock)
+        const ChunkID chunkID = ChunkID(std::floor(static_cast<float>(n.x) / chunkManager.getChunkSize()),
+            std::floor(static_cast<float>(n.y) / chunkManager.getChunkSize()));
+        chunksToLock.emplace(chunkID.x, chunkID.y);
+    }
+
+    if (chunksToLock.empty())
+        return;
+
+    for (const pair<int32_t, int32_t>& n : chunksToLock)
+    {
+        if (chunkManager.isInfinite())
         {
             if (chunkManager.chunkExists(ChunkID(n.first, n.second)))
+            {
+                if (!chunkManager.hasColorTempLayer(ChunkID(n.first, n.second)))
+                    chunkManager.createColorTempLayer(getBlendMode(BlendAlpha), ChunkID(n.first, n.second));
                 continue;
+            }
             chunkManager.AllocateChunkInfinite(ChunkID(n.first, n.second));
+            chunkManager.createColorTempLayer(getBlendMode(BlendAlpha), ChunkID(n.first, n.second));
+        }
+        else
+        {
+            if (!chunkManager.hasColorTempLayer(ChunkID(n.first, n.second)))
+                chunkManager.createColorTempLayer(getBlendMode(BlendAlpha), ChunkID(n.first, n.second));
         }
     }
+
 
     lock_guard lock(chunkManager.mtxChunkManager);
     chunkManager.lockAllChunks();
@@ -411,18 +682,18 @@ void glxy::ImageEditorWorker::PencilPixels(const Vector2f pos, const Vector2f pr
     {
         if (!chunkManager.isInfinite() && !canvasBB.contains(Vector2f(n.x + 0.5f, n.y + 0.5f)))
             continue;
-        if (chunkManager.getPixelColor(n, layerID) != color && (!chunkManager.anyHasSelectionLayer() || chunkManager.getPixelSelection(n)))
-            chunkManager.setPixelColor(n, color, layerID);
+        if (chunkManager.getFinalSelectionBounds().expired() || chunkManager.getPixelSelection(n))
+            chunkManager.setPixelColorTemp(n, color);
     }
     chunkManager.unlockAllChunks();
 }
 
-void glxy::ImageEditorWorker::BrushPixels(const Vector2f start, const Vector2f end, const float radius, const Color color, const LayerID layerID, const bool eraser)
+void glxy::ImageEditorWorker::BrushPixels(const Vector2f start, const Vector2f end, const float radius, const Color color, const bool eraser)
 {
-    const float left = min(start.x, end.x);
-    const float top = min(start.y, end.y);
-    const float right = max(start.x, end.x);
-    const float bottom = max(start.y, end.y);
+    const float left = std::min(start.x, end.x);
+    const float top = std::min(start.y, end.y);
+    const float right = std::max(start.x, end.x);
+    const float bottom = std::max(start.y, end.y);
     const FloatRect rect = FloatRect(Vector2f(left, top), Vector2f(right - left, bottom - top));
     const IntRect rectShape = IntRect(Vector2i(rect.position.x - radius, rect.position.y - radius),
         Vector2i(rect.size.x + radius * 2, rect.size.y + radius * 2));
@@ -430,21 +701,20 @@ void glxy::ImageEditorWorker::BrushPixels(const Vector2f start, const Vector2f e
     if (!chunkManager.isInfinite() && !intersect)
         return;
 
-    IntRect result;
-    if (!chunkManager.isInfinite())
-        result = *intersect;
+    vector<ChunkID> chunksToCheck;
+    ChunksInBrushLine(start, end, radius, chunksToCheck);
+
     if (chunkManager.isInfinite())
     {
-        result = rectShape;
-        ForEachChunkInChunkArea(result, [&](const ChunkID chunkID)
+        for (const ChunkID n : chunksToCheck)
         {
-            if (chunkManager.chunkExists(chunkID))
-                return;
-            chunkManager.AllocateChunkInfinite(chunkID);
-        });
+            if (chunkManager.chunkExists(n))
+                continue;
+            chunkManager.AllocateChunkInfinite(n);
+        }
     }
 
-    ForEachChunkInChunkArea(result, [&](const ChunkID chunkID)
+    for (const ChunkID chunkID : chunksToCheck)
     {
         const Vector2u chunkSize = chunkManager.getChunkSize(chunkID);
         const uint16_t chunkGeneralSize = chunkManager.getChunkSize();
@@ -460,7 +730,7 @@ void glxy::ImageEditorWorker::BrushPixels(const Vector2f start, const Vector2f e
 #endif
 
         if (chunkManager.hasColorTempLayer(chunkID))
-            RenderLayerToTexture(*chunkManager.getChunkImageColorTemp(chunkID), chunkSize, 255, BlendNone, renderTexture);
+            RenderLayerToTexture(chunkManager.getChunkImageColorTemp(chunkID), chunkSize, 255, BlendNone, renderTexture);
 
         SetupMaskedRendering(renderTexture, chunkID);
 
@@ -475,12 +745,12 @@ void glxy::ImageEditorWorker::BrushPixels(const Vector2f start, const Vector2f e
         states.stencilMode = {chunkManager.hasSelectionLayer(chunkID) ? StencilComparison::Equal : StencilComparison::Always,
             StencilUpdateOperation::Keep, 0x01, 0xFF, false};
 
-        shape.setPointCount(fmax(2.f * c_PI * sqrtf(radius), 30.f));
+        shape.setPointCount(std::max(2.f * c_PI * sqrtf(radius), 30.f));
         shape.setRadius(radius);
         shape.setOrigin(Vector2f(radius, radius));
 
-        const Vector2f startPos = Vector2f(Vector2i(floor(start.x), floor(start.y))) + Vector2f(0.5f, 0.5f);
-        const Vector2f endPos = Vector2f(Vector2i(floor(end.x), floor(end.y))) + Vector2f(0.5f, 0.5f);
+        const Vector2f startPos = Vector2f(Vector2i(std::floor(start.x), std::floor(start.y))) + Vector2f(0.5f, 0.5f);
+        const Vector2f endPos = Vector2f(Vector2i(std::floor(end.x), std::floor(end.y))) + Vector2f(0.5f, 0.5f);
 
         shape.setPosition(startPos);
         renderTexture.draw(shape, states);
@@ -512,17 +782,17 @@ void glxy::ImageEditorWorker::BrushPixels(const Vector2f start, const Vector2f e
         }
 
         chunkManager.PasteImage(renderTexture.getTexture().copyToImage(), Vector2i(chunkID.x * chunkManager.getChunkSize(), chunkID.y * chunkManager.getChunkSize()),
-                                IntRect(), ImageLayerType::ColorTemp, layerID);
+                                IntRect(), ImageLayerType::ColorTemp);
         chunkManager.getChunkMutex(chunkID).unlock();
-    });
+    }
 }
 
 void glxy::ImageEditorWorker::ColorSwapPixels(const Vector2f start, const Vector2f end, const float radius, const Color color1, const Color color2, const int8_t tol, const LayerID layerID)
 {
-    const float left = min(start.x, end.x);
-    const float top = min(start.y, end.y);
-    const float right = max(start.x, end.x);
-    const float bottom = max(start.y, end.y);
+    const float left = std::min(start.x, end.x);
+    const float top = std::min(start.y, end.y);
+    const float right = std::max(start.x, end.x);
+    const float bottom = std::max(start.y, end.y);
     const FloatRect rect = FloatRect(Vector2f(left, top), Vector2f(right - left, bottom - top));
     const IntRect rectShape = IntRect(Vector2i(rect.position.x - radius, rect.position.y - radius),
         Vector2i(rect.size.x + radius * 2, rect.size.y + radius * 2));
@@ -531,7 +801,10 @@ void glxy::ImageEditorWorker::ColorSwapPixels(const Vector2f start, const Vector
     if (!intersect)
         return;
 
-    ForEachChunkInChunkArea(*intersect, [&](const ChunkID chunkID)
+    vector<ChunkID> chunksToCheck;
+    ChunksInBrushLine(start, end, radius, chunksToCheck);
+
+    for (const ChunkID chunkID : chunksToCheck)
     {
         const Vector2u chunkSize = chunkManager.getChunkSize(chunkID);
         const uint16_t chunkGeneralSize = chunkManager.getChunkSize();
@@ -559,12 +832,12 @@ void glxy::ImageEditorWorker::ColorSwapPixels(const Vector2f start, const Vector
         states.stencilMode = {chunkManager.hasSelectionLayer(chunkID) ? StencilComparison::Equal : StencilComparison::Always,
             StencilUpdateOperation::Keep, 0x01, 0xFF, false};
 
-        shape.setPointCount(fmax(2.f * c_PI * sqrtf(radius), 30.f));
+        shape.setPointCount(std::max(2.f * c_PI * sqrtf(radius), 30.f));
         shape.setRadius(radius);
         shape.setOrigin(Vector2f(radius, radius));
 
-        const Vector2f startPos = Vector2f(Vector2i(floor(start.x), floor(start.y))) + Vector2f(0.5f, 0.5f);
-        const Vector2f endPos = Vector2f(Vector2i(floor(end.x), floor(end.y))) + Vector2f(0.5f, 0.5f);
+        const Vector2f startPos = Vector2f(Vector2i(std::floor(start.x), std::floor(start.y))) + Vector2f(0.5f, 0.5f);
+        const Vector2f endPos = Vector2f(Vector2i(std::floor(end.x), std::floor(end.y))) + Vector2f(0.5f, 0.5f);
 
         shape.setPosition(startPos);
         renderTexture.draw(shape, states);
@@ -608,7 +881,7 @@ void glxy::ImageEditorWorker::ColorSwapPixels(const Vector2f start, const Vector
                                 IntRect(), ImageLayerType::Color, layerID);
 
         chunkManager.getChunkMutex(chunkID).unlock();
-    });
+    }
 }
 
 bool glxy::ImageEditorWorker::FillPixels(const Vector2i pos, const Color color, const int8_t tolerance, const LayerID layerID)
@@ -617,9 +890,10 @@ bool glxy::ImageEditorWorker::FillPixels(const Vector2i pos, const Color color, 
         return false;
     lock_guard lock(chunkManager.mtxChunkManager);
     chunkManager.lockAllChunks();
-    chunkManager.createColorTempLayerAll(getBlendMode(BlendAlpha));
+    if (!chunkManager.allHaveColorTempLayer())
+        chunkManager.createColorTempLayerAll(getBlendMode(BlendAlpha));
     chunkManager.clearColorTempLayerAll(Color::Transparent);
-    chunkManager.FloodFill(ImageLayerType::ColorTemp, pos, color, tolerance, chunkManager.anyHasSelectionLayer(), layerID);
+    chunkManager.FloodFill(ImageLayerType::ColorTemp, pos, color, tolerance, !chunkManager.getFinalSelectionBounds().expired(), layerID);
     chunkManager.unlockAllChunks();
     return true;
 }
@@ -628,49 +902,93 @@ void glxy::ImageEditorWorker::GradientPixels(const Vector2f startPos, const Vect
 {
     chunkManager.mtxChunkManager.lock();
     chunkManager.createColorTempLayerAll(getBlendMode(BlendAlpha));
+    chunkManager.mtxChunkManager.unlock();
+
     IntRect area;
-    if (!chunkManager.anyHasSelectionLayer())
+    if (chunkManager.getFinalSelectionBounds().expired())
         area = IntRect({}, Vector2i(getSize()));
     else
     {
-        assert(!chunkManager.getFinalSelectionBounds().expired());
         const IntRect final = *chunkManager.getFinalSelectionBounds().lock();
         area = final;
     }
 
-    if (startPos == endPos)
+    ForEachChunkInChunkArea(area, [&](const ChunkID chunkID)
     {
-        chunkManager.mtxChunkManager.unlock();
-        ForEachPixelInChunkArea(area, true, [&](const Vector2i pos)
-        {
-            if (chunkManager.anyHasSelectionLayer() && !chunkManager.getPixelSelection(pos))
-                return;
-            chunkManager.setPixelColorTemp(pos, startColor);
-        });
-        return;
-    }
-    const float dist = Distance::Point_Point(startPos, endPos);
-    chunkManager.mtxChunkManager.unlock();
+        const Vector2u chunkSize = chunkManager.getChunkSize(chunkID);
+        const uint16_t chunkGeneralSize = chunkManager.getChunkSize();
 
-    ForEachPixelInChunkArea(area, true, [&](const Vector2i pos)
-    {
-        if (chunkManager.anyHasSelectionLayer() && !chunkManager.getPixelSelection(Vector2i(pos.x, pos.y)))
-            return;
-        const Vector2f s = Vector2f(pos.x + 0.5f - startPos.x, pos.y + 0.5f - startPos.y);
-        const Vector2f e = Vector2f(pos.x + 0.5f - endPos.x, pos.y + 0.5f - endPos.y);
-        if (s.x * s.x + s.y * s.y - e.x * e.x - e.y * e.y > dist * dist)
-            chunkManager.setPixelColorTemp(Vector2i(pos.x, pos.y), endColor);
-        else if (s.x * s.x + s.y * s.y - e.x * e.x - e.y * e.y < -dist * dist)
-            chunkManager.setPixelColorTemp(Vector2i(pos.x, pos.y), startColor);
+        RenderTexture renderTexture;
+
+        validate(renderTexture.resize(chunkSize, {0U, 8U, 0U}));
+
+        renderTexture.clear(Color::Transparent);
+
+#ifdef GL_ALPHA_TEST
+        renderTexture.resetGLStates(); // workaround for mixing SFML with OpenGL
+#endif
+
+        SetupMaskedRendering(renderTexture, chunkID);
+
+        renderTexture.setView(View(FloatRect(Vector2f(chunkID.x * chunkGeneralSize, chunkID.y * chunkGeneralSize),
+            Vector2f(chunkSize))));
+
+        RenderStates states;
+        states.blendMode = BlendAlpha;
+        states.stencilMode = {chunkManager.hasSelectionLayer(chunkID) ? StencilComparison::Equal : StencilComparison::Always,
+            StencilUpdateOperation::Keep, 0x01, 0xFF, false};
+
+        if (startPos == endPos)
+        {
+            const array quad = {
+                Vertex{Vector2f(chunkID.x * chunkGeneralSize, chunkID.y * chunkGeneralSize), startColor},
+                Vertex{Vector2f(chunkID.x * chunkGeneralSize + chunkSize.x, chunkID.y * chunkGeneralSize), startColor},
+                Vertex{Vector2f(chunkID.x * chunkGeneralSize + chunkSize.x, chunkID.y * chunkGeneralSize + chunkSize.y), startColor},
+                Vertex{Vector2f(chunkID.x * chunkGeneralSize, chunkID.y * chunkGeneralSize + chunkSize.y), startColor}
+            };
+            renderTexture.draw(quad.data(), 4, PrimitiveType::TriangleFan, states);
+        }
         else
         {
-            const Color c = LerpColor(startColor, endColor, (s.x * s.x + s.y * s.y - e.x * e.x - e.y * e.y) / (dist * dist) / 2 + 0.5f);
-            chunkManager.setPixelColorTemp(Vector2i(pos.x, pos.y), c);
+            const Vector2f dir = (endPos - startPos).normalized();
+            const Vector2f perp = dir.perpendicular();
+            const array quadCenter = {
+                Vertex{Vector2f(startPos + perp * 1e6f), startColor},
+                Vertex{Vector2f(startPos - perp * 1e6f), startColor},
+                Vertex{Vector2f(endPos - perp * 1e6f), endColor},
+                Vertex{Vector2f(endPos + perp * 1e6f), endColor},
+            };
+            const array quadStart = {
+                Vertex{Vector2f(startPos - perp * 1e6f), startColor},
+                Vertex{Vector2f(startPos + perp * 1e6f), startColor},
+                Vertex{Vector2f(startPos + perp * 1e6f - dir * 1e6f), startColor},
+                Vertex{Vector2f(startPos - perp * 1e6f - dir * 1e6f), startColor},
+            };
+            const array quadEnd = {
+                Vertex{Vector2f(endPos - perp * 1e6f), endColor},
+                Vertex{Vector2f(endPos + perp * 1e6f), endColor},
+                Vertex{Vector2f(endPos + perp * 1e6f + dir * 1e6f), endColor},
+                Vertex{Vector2f(endPos - perp * 1e6f + dir * 1e6f), endColor},
+            };
+            renderTexture.draw(quadStart.data(), 4, PrimitiveType::TriangleFan, states);
+            renderTexture.draw(quadEnd.data(), 4, PrimitiveType::TriangleFan, states);
+            renderTexture.draw(quadCenter.data(), 4, PrimitiveType::TriangleFan, states);
         }
+        renderTexture.display();
+
+        chunkManager.getChunkMutex(chunkID).lock();
+
+        if (!chunkManager.hasColorTempLayer(chunkID))
+            chunkManager.createColorTempLayer(getBlendMode(BlendAlpha), chunkID);
+
+        chunkManager.PasteImage(renderTexture.getTexture().copyToImage(), Vector2i(chunkID.x * chunkManager.getChunkSize(), chunkID.y * chunkManager.getChunkSize()),
+            IntRect(), ImageLayerType::ColorTemp);
+
+        chunkManager.getChunkMutex(chunkID).unlock();
     });
 }
 
-void glxy::ImageEditorWorker::ShapePixels(const shared_ptr<ConvexShape>& shape, const LayerID layerID)
+void glxy::ImageEditorWorker::ShapePixels(const shared_ptr<ConvexShape>& shape)
 {
     IntRect area = IntRect(Vector2i(shape->getGlobalBounds().position), Vector2i(shape->getGlobalBounds().size));
     if (prevShapeRenderArea != IntRect())
@@ -685,6 +1003,9 @@ void glxy::ImageEditorWorker::ShapePixels(const shared_ptr<ConvexShape>& shape, 
 
     ForEachChunkInChunkArea(*intersect, [&](const ChunkID chunkID)
     {
+        if (!chunkManager.hasSelectionLayer(chunkID) && (!chunkManager.getFinalSelectionBounds().expired() || newMoveSelectArea != IntRect()))
+            return;
+
         const Vector2u chunkSize = chunkManager.getChunkSize(chunkID);
         const uint16_t chunkGeneralSize = chunkManager.getChunkSize();
 
@@ -720,13 +1041,13 @@ void glxy::ImageEditorWorker::ShapePixels(const shared_ptr<ConvexShape>& shape, 
             chunkManager.createColorTempLayer(getBlendMode(BlendAlpha), chunkID);
 
         chunkManager.PasteImage(renderTexture.getTexture().copyToImage(), Vector2i(chunkID.x * chunkManager.getChunkSize(), chunkID.y * chunkManager.getChunkSize()),
-                IntRect(), ImageLayerType::ColorTemp, layerID);
+                IntRect(), ImageLayerType::ColorTemp);
 
         chunkManager.getChunkMutex(chunkID).unlock();
     });
 }
 
-void glxy::ImageEditorWorker::TextPixels(const shared_ptr<Text>& text, const FloatRect& globalBounds, const LayerID layerID)
+void glxy::ImageEditorWorker::TextPixels(const shared_ptr<Text>& text, const FloatRect& globalBounds)
 {
     IntRect area = IntRect(Vector2i(globalBounds.position), Vector2i(globalBounds.size));
     if (prevTextRenderArea != IntRect())
@@ -741,6 +1062,9 @@ void glxy::ImageEditorWorker::TextPixels(const shared_ptr<Text>& text, const Flo
 
     ForEachChunkInChunkArea(*intersect, [&](const ChunkID chunkID)
     {
+        if (!chunkManager.hasSelectionLayer(chunkID) && (!chunkManager.getFinalSelectionBounds().expired() || newMoveSelectArea != IntRect()))
+            return;
+
         const Vector2u chunkSize = chunkManager.getChunkSize(chunkID);
         const uint16_t chunkGeneralSize = chunkManager.getChunkSize();
 
@@ -776,7 +1100,7 @@ void glxy::ImageEditorWorker::TextPixels(const shared_ptr<Text>& text, const Flo
             chunkManager.createColorTempLayer(getBlendMode(BlendAlpha), chunkID);
 
         chunkManager.PasteImage(renderTexture.getTexture().copyToImage(), Vector2i(chunkID.x * chunkManager.getChunkSize(), chunkID.y * chunkManager.getChunkSize()),
-                IntRect(), ImageLayerType::ColorTemp, layerID);
+                IntRect(), ImageLayerType::ColorTemp);
 
         chunkManager.getChunkMutex(chunkID).unlock();
     });
@@ -804,10 +1128,10 @@ void glxy::ImageEditorWorker::ResizeCanvas(const Vector2u size, const Pivot pivo
     chunkManager.lockAllChunks();
     for (LayerID i = 0; i < layerCount; i++)
     {
-        chunkManager.PasteImage(layers.at(i), Vector2i(-min(newSize.position.x, 0), -min(newSize.position.y, 0)),
-                                IntRect(Vector2i(max(newSize.position.x, 0), max(newSize.position.y, 0)),
-                                        Vector2i(min(newSize.size.x, static_cast<int32_t>(oldSize.x)),
-                                                 min(newSize.size.y, static_cast<int32_t>(oldSize.y)))), ImageLayerType::Color, i);
+        chunkManager.PasteImage(layers.at(i), Vector2i(-std::min(newSize.position.x, 0), -std::min(newSize.position.y, 0)),
+                                IntRect(Vector2i(std::max(newSize.position.x, 0), std::max(newSize.position.y, 0)),
+                                        Vector2i(std::min(newSize.size.x, static_cast<int32_t>(oldSize.x)),
+                                                 std::min(newSize.size.y, static_cast<int32_t>(oldSize.y)))), ImageLayerType::Color, i);
     }
     chunkManager.unlockAllChunks();
 }
@@ -844,9 +1168,8 @@ void glxy::ImageEditorWorker::Adjustment(const Adjustments adjustment, const Lay
 {
     IntRect rect = IntRect(chunkID * static_cast<int32_t>(chunkManager.getChunkSize()), Vector2i(chunkManager.getChunkSize(chunkID)));
     {
-        if (chunkManager.anyHasSelectionLayer())
+        if (!chunkManager.getFinalSelectionBounds().expired())
         {
-            assert(!chunkManager.getFinalSelectionBounds().expired());
             const std::optional<IntRect> intersect = chunkManager.getFinalSelectionBounds().lock()->findIntersection(rect);
             if (intersect)
                 rect = *intersect;
@@ -862,9 +1185,8 @@ void glxy::ImageEditorWorker::Effect(const Effects effect, const LayerID layerID
 {
     IntRect rect = IntRect(chunkID * static_cast<int32_t>(chunkManager.getChunkSize()), Vector2i(chunkManager.getChunkSize(chunkID)));
     {
-        if (chunkManager.anyHasSelectionLayer())
+        if (!chunkManager.getFinalSelectionBounds().expired())
         {
-            assert(!chunkManager.getFinalSelectionBounds().expired());
             const std::optional<IntRect> intersect = chunkManager.getFinalSelectionBounds().lock()->findIntersection(rect);
             if (intersect)
                 rect = *intersect;
@@ -895,13 +1217,16 @@ void glxy::ImageEditorWorker::MergeColorTempLayer(const LayerID layerID, const B
 
 void glxy::ImageEditorWorker::AllocateChunks(const Vector2u size)
 {
-    if (chunkManager.anyHasSelectionLayer())
+    if (!chunkManager.getFinalSelectionBounds().expired())
+    {
+        newMoveSelectArea = IntRect();
         chunkManager.resetSelection();
+    }
     chunkManager.AllocateChunksFixed(size);
 }
 
 uint32_t glxy::ImageEditorWorker::getChunkIDFromPixel(const Vector2u pixel) const
 {
     lock_guard lock(chunkManager.mtxChunkManager);
-    return pixel.x / chunkManager.getChunkSize() + pixel.y / chunkManager.getChunkSize() * ceil(static_cast<float>(getSize().x) / chunkManager.getChunkSize());
+    return pixel.x / chunkManager.getChunkSize() + pixel.y / chunkManager.getChunkSize() * std::ceil(static_cast<float>(getSize().x) / chunkManager.getChunkSize());
 }

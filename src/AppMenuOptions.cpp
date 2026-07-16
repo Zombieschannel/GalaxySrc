@@ -10,6 +10,11 @@ void glxy::App::MenuOpen()
     popUpState.push_back(PopUpState::Open);
 }
 
+void glxy::App::MenuOpenRecent()
+{
+    popUpState.push_back(PopUpState::Recent);
+}
+
 void glxy::App::MenuSave()
 {
     SaveImage();
@@ -145,9 +150,9 @@ void glxy::App::MenuZoomOut()
 
 void glxy::App::MenuGrid()
 {
-    settings.showGrid = !settings.showGrid;
+    config.showGrid = !config.showGrid;
     for (auto& n : _imageEditor)
-        n->OptionGrid(settings.showGrid);
+        n->OptionGrid(config.showGrid);
 }
 
 void glxy::App::MenuGridBold()
@@ -157,20 +162,20 @@ void glxy::App::MenuGridBold()
 
 void glxy::App::MenuRuler()
 {
-    settings.showRuler = !settings.showRuler;
+    config.showRuler = !config.showRuler;
     for (auto& n : _imageEditor)
-        n->OptionRuler(settings.showRuler);
+        n->OptionRuler(config.showRuler);
 }
 
 void glxy::App::MenuActualSize()
 {
-    ImageEditor* active = _imageEditor.at(activeImageEditor).get();
+    ImageEditor* active = _imageEditor.at(hoveredImageEditor).get();
     active->OptionActualSize();
 }
 
 void glxy::App::MenuSyncViewport()
 {
-    settings.syncViewport = !settings.syncViewport;
+    config.syncViewport = !config.syncViewport;
 }
 
 void glxy::App::MenuCrop()
@@ -233,6 +238,12 @@ void glxy::App::MenuTransformImage()
     _imageEditor.at(activeImageEditor)->currentTool = Tool::BoxSelect;
     popUpState.push_back(PopUpState::TransformImage);
     AddWork(CanvasWork::TransformImageSetup{_layerPicker.getLayerIDSelected(activeImageEditor)});
+}
+
+void glxy::App::MenuCircularShift()
+{
+    popUpState.push_back(PopUpState::CircularShift);
+    AddWork(CanvasWork::CircularShiftSetup{_layerPicker.getLayerIDSelected(activeImageEditor)});
 }
 
 void glxy::App::MenuNewLayer()
@@ -362,6 +373,24 @@ void glxy::App::MenuEffectFractal()
     targetEffect = Effects::FractalNoise;
 }
 
+void glxy::App::MenuEffectVignette()
+{
+    popUpState.push_back(PopUpState::Effect);
+    targetEffect = Effects::Vignette;
+}
+
+void glxy::App::MenuEffectMandelbrot()
+{
+    popUpState.push_back(PopUpState::Effect);
+    targetEffect = Effects::Mandelbrot;
+}
+
+void glxy::App::MenuEffectSharpening()
+{
+    popUpState.push_back(PopUpState::Effect);
+    targetEffect = Effects::Sharpening;
+}
+
 void glxy::App::MenuChangelog()
 {
     popUpState.push_back(PopUpState::Changelog);
@@ -379,7 +408,9 @@ void glxy::App::MenuGLScan()
 
 void glxy::App::MenuDebug()
 {
-    settings.debugMode = !settings.debugMode;
+    config.debugMode = !config.debugMode;
+    for (const auto& n : _imageEditor)
+        n->needsCoreGraphicsUpdate = true;
 }
 
 void glxy::App::MenuAbout()

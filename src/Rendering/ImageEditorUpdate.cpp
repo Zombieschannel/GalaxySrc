@@ -15,44 +15,58 @@ void glxy::ImageEditor::UpdateZoom()
         //zoom
         float scroll = 0;
 
-#if defined(SFML_SYSTEM_WINDOWS) || defined(SFML_SYSTEM_MACOS)
+#if defined(SFML_SYSTEM_WINDOWS)
         scroll = InputEvent::getScrollData().y;
         if (scroll != 1.f && scroll != -1.f)
             scroll = 0;
 #else
-        if (!settings.touchPadSupport)
+        if (!config.touchPadSupport)
             scroll = InputEvent::getScrollData().y;
 #endif
-        if (!settings.touchPadSupport)
-        {
-            Vector2f touchpad;
-            if (InputEvent::isButtonPressed(Mouse::Button::Extra1))
-                touchpad.x = InputEvent::getScrollData().y;
-            else if (InputEvent::isButtonPressed(Mouse::Button::Extra2))
-                touchpad.y = InputEvent::getScrollData().y;
 
-            if (touchpad.x != 0.f)
-                MoveView(Vector2f(touchpad.x, 0) * -windowScale * c_touchPadViewMove);
-            if (touchpad.y != 0.f)
-                MoveView(Vector2f(0, touchpad.y) * -windowScale * c_touchPadViewMove);
-
-            if (touchpad != Vector2f())
-                scroll = 0;
-        }
         if (currentTool == Tool::Zoom)
         {
-            if (InputEvent::isButtonReleased(Mouse::Button::Left)) scroll = 1;
-            if (InputEvent::isButtonReleased(Mouse::Button::Right)) scroll = -1;
+#ifdef SFML_DESKTOP
+            const Vector2i posScreen = InputEvent::getMousePosition();
+#else
+            const Vector2i posScreen = InputEvent::getTouchPosition(0);
+#endif
+
+            if (InputEvent::isTouchPressed(0) ||
+                InputEvent::isButtonPressed(Mouse::Button::Left) || InputEvent::isButtonPressed(Mouse::Button::Right) ||
+                config.middleMouseButton == 3 && InputEvent::isButtonPressed(Mouse::Button::Middle) ||
+                config.extra1MouseButton == 3 && InputEvent::isButtonPressed(Mouse::Button::Extra1) ||
+                config.extra2MouseButton == 3 && InputEvent::isButtonPressed(Mouse::Button::Extra2))
+            {
+                if (!hasStartedZoom)
+                {
+                    zoomMouseStartPosX = posScreen.x;
+                    hasStartedZoom = true;
+                }
+                else
+                {
+                    if (zoomMouseStartPosX - posScreen.x > 20)
+                    {
+                        OptionZoomOut(false);
+                        zoomMouseStartPosX -= 20;
+                    }
+                    else if (zoomMouseStartPosX - posScreen.x < -20)
+                    {
+                        OptionZoomIn(false);
+                        zoomMouseStartPosX += 20;
+                    }
+                }
+            }
         }
         if (scroll < 0)
             OptionZoomOut(true);
         else if (scroll > 0)
             OptionZoomIn(true);
 
-        if (settings.touchPadSupport)
+        if (config.touchPadSupport)
         {
             const Vector2f touchpad = InputEvent::getScrollData();
-#if defined(SFML_SYSTEM_WINDOWS) || defined(SFML_SYSTEM_MACOS)
+#if defined(SFML_SYSTEM_WINDOWS)
             if (touchpad.x != 0.f)
                 MoveView(Vector2f(touchpad.x, 0) * -windowScale * c_touchPadViewMove);
             if (touchpad.y != 0.f && touchpad.y != -1.f && touchpad.y != 1.f)
@@ -73,16 +87,20 @@ void glxy::ImageEditor::UpdateZoom()
         cameraAnimation += TimeControl::DeltaReal();
 
     const float delta = cameraAnimation.asSeconds() * 10.f;
-    if ((settings.animateZoom || settings.animatePan) && delta < 1.f && cameraAnimationRunning)
+    if ((config.animateZoom || config.animatePan) && delta < 1.f && cameraAnimationRunning)
     {
         view.setCenter(cameraOriginalPos + (cameraTargetPos - cameraOriginalPos) * powf(delta, 0.8f));
         view.setSize(cameraOriginalSize + (cameraTargetSize - cameraOriginalSize) * powf(delta, 0.8f));
+        needsCoreGraphicsUpdate = true;
+        needsUIGraphicsUpdate = true;
     }
     else if (cameraAnimationRunning)
     {
         view.setCenter(cameraTargetPos);
         view.setSize(cameraTargetSize);
         cameraAnimationRunning = false;
+        needsCoreGraphicsUpdate = true;
+        needsUIGraphicsUpdate = true;
     }
     if (!cameraAnimationRunning)
     {
@@ -93,30 +111,55 @@ void glxy::ImageEditor::UpdateZoom()
 
 void glxy::ImageEditor::UpdateTool()
 {
-    const bool toolHasChanged = _toolPicker.wasUserChanged() || forceToolChange;
+    const bool toolHasChanged = (_toolPicker.wasUserChanged() || forceToolChange) && !forceToolNoChange;
     if (toolHasChanged && currentTool == Tool::Brush)
-        OptionSetBrushSize(settings.brushRadius);
+        OptionSetBrushSize(config.brushRadius);
     if (toolHasChanged && currentTool == Tool::Eraser)
-        OptionSetBrushSize(settings.eraserRadius);
+        OptionSetBrushSize(config.eraserRadius);
     if (toolHasChanged && currentTool == Tool::ColorSwap)
-        OptionSetBrushSize(settings.colorSwapRadius);
+        OptionSetBrushSize(config.colorSwapRadius);
     if (toolHasChanged && (currentTool == Tool::MoveSelected || currentTool == Tool::MoveSelection))
     {
         if (!chunkManager.getFinalSelectionBounds().expired())
             ResetMovePixels();
     }
+    if (toolHasChanged)
+        needsUIGraphicsUpdate = true;
     forceToolChange = false;
+    forceToolNoChange = false;
 
     const bool anyPressed = InputEvent::isButtonPressed(Mouse::Button::Left) || InputEvent::isButtonPressed(Mouse::Button::Right) || InputEvent::isTouchPressed(0);
     const bool bothNotPressed = !InputEvent::isButtonPressed(Mouse::Button::Left) && !InputEvent::isButtonPressed(Mouse::Button::Right) && !InputEvent::isTouchPressed(0);
     const Vector2f pos = getSFMLViewCursorPos(viewArea, view);
     const Vector2f posUI = getSFMLViewCursorPos(viewArea, viewUI);
+#ifdef SFML_DESKTOP
+    const Vector2i posScreen = InputEvent::getMousePosition();
+#else
+    const Vector2i posScreen = InputEvent::getTouchPosition(0);
+#endif
+
     if (viewHovered || wasHoveredUponAction)
     {
         Color targetColor;
         wasHoveredUponAction = anyPressed;
         switch (currentTool)
         {
+        case Tool::Pan:
+        {
+            if (InputEvent::isTouchPressed(0) && InputEvent::isTouchPressed(1) ||
+                InputEvent::isButtonPressed(Mouse::Button::Left) || InputEvent::isButtonPressed(Mouse::Button::Right) ||
+                config.middleMouseButton == 4 && InputEvent::isButtonPressed(Mouse::Button::Middle) ||
+                config.extra1MouseButton == 4 && InputEvent::isButtonPressed(Mouse::Button::Extra1) ||
+                config.extra2MouseButton == 4 && InputEvent::isButtonPressed(Mouse::Button::Extra2))
+            {
+                if (mouseScreenPosPrevFrame)
+                {
+                    const Vector2f dir = Vector2f(*mouseScreenPosPrevFrame - posScreen) * windowScale;
+                    MoveView(dir);
+                }
+            }
+            break;
+        }
         case Tool::BoxSelect: case Tool::CircleSelect:
             if (anyPressed)
             {
@@ -136,7 +179,7 @@ void glxy::ImageEditor::UpdateTool()
                 cacheShapeSelection = Vector2i(pos);
             }
             else if (chunkManager.hasStartedSelect())
-                AddWork(CanvasWork::EndSelect{pos, currentTool == Tool::BoxSelect ? ShapeSelectType::Box : ShapeSelectType::Circle});
+                AddWork(CanvasWork::EndSelect{pos});
             break;
         case Tool::LassoSelect:
             if (anyPressed)
@@ -153,7 +196,7 @@ void glxy::ImageEditor::UpdateTool()
                 cacheLassoSelection = clamped;
             }
             else if (chunkManager.hasStartedSelect())
-                AddWork(CanvasWork::EndSelect{pos, ShapeSelectType::Lasso});
+                AddWork(CanvasWork::EndSelect{pos});
 
             if (lassoSelectVertexCount != chunkManager.getLassoSelectPointCount())
             {
@@ -167,10 +210,12 @@ void glxy::ImageEditor::UpdateTool()
         case Tool::Pencil:
             targetColor = getUsedColor();
 
-            if (anyPressed)
+            if (anyPressed && (!hasStartedPencil || hasStartedPencil && cachePencilPosition != pos))
             {
+                hasStartedPencil = true;
                 unsavedChanges = true;
-                AddWork(CanvasWork::PencilPixels{pos, mousePosPrevFrame, targetColor, _layerPicker.getLayerIDSelected(arrayID) });
+                cacheBrushPosition = pos;
+                AddWork(CanvasWork::PencilPixels{pos, mousePosPrevFrame.has_value() ? *mousePosPrevFrame : pos, targetColor, _layerPicker.getLayerIDSelected(arrayID)});
             }
             break;
         case Tool::Eraser:
@@ -179,7 +224,7 @@ void glxy::ImageEditor::UpdateTool()
                 hasStartedBrush = true;
                 unsavedChanges = true;
                 cacheBrushPosition = pos;
-                AddWork(CanvasWork::EraserPixels{pos, mousePosPrevFrame, settings.eraserRadius, _layerPicker.getLayerIDSelected(arrayID) });
+                AddWork(CanvasWork::EraserPixels{pos, mousePosPrevFrame.has_value() ? *mousePosPrevFrame : pos, config.eraserRadius, _layerPicker.getLayerIDSelected(arrayID)});
             }
             break;
         case Tool::Brush:
@@ -190,14 +235,14 @@ void glxy::ImageEditor::UpdateTool()
                 hasStartedBrush = true;
                 unsavedChanges = true;
                 cacheBrushPosition = pos;
-                AddWork(CanvasWork::BrushPixels{pos, mousePosPrevFrame, targetColor, settings.brushRadius, _layerPicker.getLayerIDSelected(arrayID) });
+                AddWork(CanvasWork::BrushPixels{pos, mousePosPrevFrame.has_value() ? *mousePosPrevFrame : pos, targetColor, config.brushRadius, _layerPicker.getLayerIDSelected(arrayID)});
             }
             break;
         case Tool::Picker:
         {
             Color32f target;
             bool read = false;
-            read = ReadPixel(Vector2f(floor(pos.x), floor(pos.y)), target);
+            read = ReadPixel(Vector2f(std::floor(pos.x), std::floor(pos.y)), target);
             if (read)
             {
                 if (InputEvent::isButtonPressed(Mouse::Button::Left) && target != currentColor.at(0))
@@ -214,14 +259,14 @@ void glxy::ImageEditor::UpdateTool()
             targetColor = getUsedColor();
             if (lock_guard lock(common.mtxEditorWorkerCommon);
                 common.getBucketFill() && !hasStartedBucket)
-                bucketFillMove.Update(texture, pos, posUI);
+                needsUIGraphicsUpdate |= bucketFillMove.Update(coreTexture, pos, posUI);
             if (bucketFillMove.hasChanged())
             {
                 lock_guard lock(common.mtxEditorWorkerCommon);
                 bucketFillPosition += Vector2i(bucketFillMove.getDelta());
 
                 unsavedChanges = true;
-                AddWork(CanvasWork::BucketFill{bucketFillPosition, bucketFillColor, settings.bucketTolerance, _layerPicker.getLayerIDSelected(arrayID)});
+                AddWork(CanvasWork::BucketFill{bucketFillPosition, bucketFillColor, config.bucketTolerance, _layerPicker.getLayerIDSelected(arrayID)});
             }
             if (anyPressed && !bucketFillMove.isSelected() && !hasStartedBucket)
             {
@@ -235,7 +280,7 @@ void glxy::ImageEditor::UpdateTool()
                         AddWork(CanvasWork::Finish{});
 
                     unsavedChanges = true;
-                    AddWork(CanvasWork::BucketFill{Vector2i(pos), targetColor, settings.bucketTolerance, _layerPicker.getLayerIDSelected(arrayID)});
+                    AddWork(CanvasWork::BucketFill{Vector2i(pos), targetColor, config.bucketTolerance, _layerPicker.getLayerIDSelected(arrayID)});
                     bucketFillColor = targetColor;
                     bucketFillPosition = Vector2i(pos);
                     bucketFillMove.setPosition(Vector2f(bucketFillPosition) + Vector2f(0.5f, 0.5f));
@@ -247,7 +292,7 @@ void glxy::ImageEditor::UpdateTool()
         {
             if (lock_guard lock(common.mtxEditorWorkerCommon);
                 common.getWandFill() && !hasStartedWand)
-                wandMove.Update(texture, pos, posUI);
+                needsUIGraphicsUpdate |= wandMove.Update(coreTexture, pos, posUI);
             if (wandMove.hasChanged())
             {
                 wandFillPosition += Vector2i(wandMove.getDelta());
@@ -255,7 +300,7 @@ void glxy::ImageEditor::UpdateTool()
                     break;
                 const Vector2f clamped = Vector2f(std::clamp(wandFillPosition.x, 0, static_cast<int32_t>(getSize().x - 1)),
                     std::clamp(wandFillPosition.y, 0, static_cast<int32_t>(getSize().y - 1)));
-                AddWork(CanvasWork::WandFill{Vector2u(clamped), settings.wandTolerance, _layerPicker.getLayerIDSelected(arrayID)});
+                AddWork(CanvasWork::WandFill{Vector2u(clamped), config.wandTolerance, _layerPicker.getLayerIDSelected(arrayID)});
             }
             if (anyPressed && !wandMove.isSelected() && !hasStartedWand)
             {
@@ -272,19 +317,20 @@ void glxy::ImageEditor::UpdateTool()
                     wandMove.setPosition(Vector2f(wandFillPosition) + Vector2f(0.5f, 0.5f));
                     const Vector2f clamped = Vector2f(std::clamp(pos.x, 0.f, static_cast<float>(getSize().x - 1)),
                         std::clamp(pos.y, 0.f, static_cast<float>(getSize().y - 1)));
-                    AddWork(CanvasWork::WandFill{Vector2u(clamped), settings.wandTolerance, _layerPicker.getLayerIDSelected(arrayID)});
+                    AddWork(CanvasWork::WandFill{Vector2u(clamped), config.wandTolerance, _layerPicker.getLayerIDSelected(arrayID)});
                 }
             }
             break;
         }
         case Tool::MoveSelected: case Tool::MoveSelection:
-            if (chunkManager.anyHasSelectionLayer() || chunkManager.anyHasSelectionTempLayer())
+            if (lock_guard lock(common.mtxEditorWorkerCommon);
+                common.getNewMoveSelectArea() != IntRect() || !chunkManager.getFinalSelectionBounds().expired() || chunkManager.anyHasSelectionTempLayer())
             {
-                moveSelectionMove.Update(texture, pos, posUI);
-                moveSelectionRotate.Update(texture, pos, posUI);
+                needsUIGraphicsUpdate |= moveSelectionMove.Update(coreTexture, pos, posUI);
+                needsUIGraphicsUpdate |= moveSelectionRotate.Update(coreTexture, pos, posUI);
                 for (auto& n : moveSelectionPoints)
-                    n.Update(texture, pos, posUI);
-                moveSelectionMoveArea.Update(texture, pos, posUI);
+                    needsUIGraphicsUpdate |= n.Update(coreTexture, pos, posUI);
+                needsUIGraphicsUpdate |= moveSelectionMoveArea.Update(coreTexture, pos, posUI);
             }
             if (moveSelectionMove.hasChanged() && moveSelectionMove.getDelta() != Vector2f())
             {
@@ -299,14 +345,14 @@ void glxy::ImageEditor::UpdateTool()
                     static_cast<float>(moveSelectionSize.y) / moveSelectionOriginalSize.y);
 
                 if (currentTool == Tool::MoveSelected)
-                    AddWork(CanvasWork::MovePixels{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID)});
+                    AddWork(CanvasWork::MovePixels{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID), config.transformSamplingSmooth});
                 else if (currentTool == Tool::MoveSelection)
                     AddWork(CanvasWork::MoveSelection{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID)});
             }
             if (moveSelectionRotate.hasChanged() && moveSelectionRotate.getDelta() != Vector2f())
             {
                 const Vector2f center = moveSelectionTransform.getPosition();
-                const Angle angle = (mousePosPrevFrame - center).angleTo(pos - center);
+                const Angle angle = mousePosPrevFrame.has_value() ? (*mousePosPrevFrame - center).angleTo(pos - center) : Angle::Zero;
                 moveSelectionMoveArea.rotate(angle);
                 moveSelectionTransform.rotate(angle);
                 moveSelectionMove.rotate(angle);
@@ -320,7 +366,7 @@ void glxy::ImageEditor::UpdateTool()
                     static_cast<float>(moveSelectionSize.y) / moveSelectionOriginalSize.y);
 
                 if (currentTool == Tool::MoveSelected)
-                    AddWork(CanvasWork::MovePixels{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID)});
+                    AddWork(CanvasWork::MovePixels{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID), config.transformSamplingSmooth});
                 else if (currentTool == Tool::MoveSelection)
                     AddWork(CanvasWork::MoveSelection{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID)});
             }
@@ -337,7 +383,7 @@ void glxy::ImageEditor::UpdateTool()
                     static_cast<float>(moveSelectionSize.y) / moveSelectionOriginalSize.y);
 
                 if (currentTool == Tool::MoveSelected)
-                    AddWork(CanvasWork::MovePixels{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID)});
+                    AddWork(CanvasWork::MovePixels{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID), config.transformSamplingSmooth});
                 else if (currentTool == Tool::MoveSelection)
                     AddWork(CanvasWork::MoveSelection{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID)});
             }
@@ -377,7 +423,7 @@ void glxy::ImageEditor::UpdateTool()
                     const Vector2f scale = Vector2f(newBounds.size.x / moveSelectionOriginalSize.x, newBounds.size.y / moveSelectionOriginalSize.y);
 
                     if (currentTool == Tool::MoveSelected)
-                        AddWork(CanvasWork::MovePixels{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID)});
+                        AddWork(CanvasWork::MovePixels{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID), config.transformSamplingSmooth});
                     else if (currentTool == Tool::MoveSelection)
                         AddWork(CanvasWork::MoveSelection{moveSelectionTransform.getTransform(), scale, _layerPicker.getLayerIDSelected(arrayID)});
                 }
@@ -399,9 +445,9 @@ void glxy::ImageEditor::UpdateTool()
             if (lock_guard lock(common.mtxEditorWorkerCommon);
                 common.getGradientDraw() && !common.getGradientSetup())
             {
-                gradientEnd.Update(texture, pos, posUI);
-                gradientStart.Update(texture, pos, posUI);
-                gradientMove.Update(texture, pos, posUI);
+                needsUIGraphicsUpdate |= gradientEnd.Update(coreTexture, pos, posUI);
+                needsUIGraphicsUpdate |= gradientStart.Update(coreTexture, pos, posUI);
+                needsUIGraphicsUpdate |= gradientMove.Update(coreTexture, pos, posUI);
                 if (gradientMove.hasChanged() && gradientMove.getDelta() != Vector2f())
                 {
                     gradientStart.move(gradientMove.getDelta());
@@ -429,12 +475,13 @@ void glxy::ImageEditor::UpdateTool()
                 if (lock_guard lock(common.mtxEditorWorkerCommon);
                     !gradientEnd.isSelected() && !gradientStart.isSelected() && !gradientMove.isSelected() && !common.getGradientSetup())
                 {
-                    unsavedChanges = true;
+                    needsUIGraphicsUpdate = true;
                     AddWork(CanvasWork::GradientSetup{});
                     gradientStart.setPosition(pos);
                 }
-                else if (common.getGradientSetup())
+                else if (common.getGradientSetup() && cacheGradientPosition != pos)
                 {
+                    cacheGradientPosition = pos;
                     gradientEnd.setPosition(pos);
                     if (gradientEnd.getPosition() == gradientStart.getPosition())
                         gradientMove.setOrigin(Vector2f(0.025f, 0));
@@ -442,6 +489,7 @@ void glxy::ImageEditor::UpdateTool()
                         gradientMove.setOrigin((gradientEnd.getPosition() - gradientStart.getPosition()).normalized() * 0.025f);
                     gradientMove.setPosition(gradientEnd.getPosition());
 
+                    needsUIGraphicsUpdate = true;
                     unsavedChanges = true;
                     AddWork(CanvasWork::GradientPixels{gradientStart.getPosition(), gradientEnd.getPosition(), color1, color2,
                         _layerPicker.getLayerIDSelected(arrayID)});
@@ -458,11 +506,11 @@ void glxy::ImageEditor::UpdateTool()
             if (lock_guard lock(common.mtxEditorWorkerCommon);
                 common.getShapeDraw() && !hasStartedShape)
             {
-                shapeMove.Update(texture, pos, posUI);
-                shapeRotate.Update(texture, pos, posUI);
+                needsUIGraphicsUpdate |= shapeMove.Update(coreTexture, pos, posUI);
+                needsUIGraphicsUpdate |= shapeRotate.Update(coreTexture, pos, posUI);
                 for (auto& n : shapeSizePoints)
-                    n.Update(texture, pos, posUI);
-                shapeMoveArea.Update(texture, pos, posUI);
+                    needsUIGraphicsUpdate |= n.Update(coreTexture, pos, posUI);
+                needsUIGraphicsUpdate |= shapeMoveArea.Update(coreTexture, pos, posUI);
                 if (shapeMove.hasChanged() && shapeMove.getDelta() != Vector2f())
                 {
                     for (int8_t i = 0; i < shapeSizePoints.size(); i++)
@@ -476,7 +524,7 @@ void glxy::ImageEditor::UpdateTool()
                 if (shapeRotate.hasChanged() && shapeRotate.getDelta() != Vector2f())
                 {
                     const Vector2f center = shape.getTransform().transformPoint(Vector2f(shapeSize) / 2.f);
-                    const Angle angle = (mousePosPrevFrame - center).angleTo(pos - center);
+                    const Angle angle = mousePosPrevFrame.has_value() ? (*mousePosPrevFrame - center).angleTo(pos - center) : Angle::Zero;
                     shape.rotate(angle);
                     shapeMove.rotate(angle);
                     shapeRotate.rotate(angle);
@@ -526,7 +574,7 @@ void glxy::ImageEditor::UpdateTool()
                             break;
                         }
 
-                        RenderShapes::getShape(shape, static_cast<ShapeType>(settings.shapeID), Vector2i(newBounds.size), settings.shapeRadius);
+                        RenderShapes::getShape(shape, static_cast<ShapeType>(config.shapeID), Vector2i(newBounds.size), config.shapeRadius);
                         shape.setPosition(Vector2f(newBounds.position));
                         shapeSize = Vector2i(newBounds.size);
                         shape.setOrigin(Vector2f(shapeSize) / 2.f);
@@ -553,17 +601,20 @@ void glxy::ImageEditor::UpdateTool()
                     }
                     hasStartedShape = true;
                     unsavedChanges = true;
+                    needsUIGraphicsUpdate = true;
 
                     shapeStartPosition = Vector2i(std::clamp(pos.x, 0.f, getSize().x - 1.f), std::clamp(pos.y, 0.f, getSize().y - 1.f));
-                    RenderShapes::getShape(shape, static_cast<ShapeType>(settings.shapeID), Vector2i(1, 1), settings.shapeRadius);
+                    RenderShapes::getShape(shape, static_cast<ShapeType>(config.shapeID), Vector2i(1, 1), config.shapeRadius);
                     shape.setPosition(Vector2f(shapeStartPosition) + Vector2f(0.5f, 0.5f));
                     shapeSize = Vector2i(1, 1);
                     shape.setRotation(Angle::Zero);
                     shape.setOrigin(Vector2f(0.5f, 0.5f));
                     shape.setFillColor(color1);
                     shape.setOutlineColor(color2);
-                    shape.setOutlineThickness(settings.shapeOutlineThickness);
+                    shape.setOutlineThickness(config.shapeOutlineThickness);
 
+                    for (int8_t i = 0; i < shapeSizePoints.size(); i++)
+                        shapeSizePoints.at(i).setRotation(Angle::Zero);
                     shapeMove.setRotation(Angle::Zero);
                     shapeRotate.setRotation(Angle::Zero);
                     shapeMoveArea.setRotation(Angle::Zero);
@@ -576,15 +627,16 @@ void glxy::ImageEditor::UpdateTool()
                     if (shapeEndPosition != endPos)
                     {
                         Vector2i minPos, maxPos;
-                        minPos.x = min(shapeStartPosition.x, endPos.x);
-                        maxPos.x = max(shapeStartPosition.x, endPos.x);
-                        minPos.y = min(shapeStartPosition.y, endPos.y);
-                        maxPos.y = max(shapeStartPosition.y, endPos.y);
+                        minPos.x = std::min(shapeStartPosition.x, endPos.x);
+                        maxPos.x = std::max(shapeStartPosition.x, endPos.x);
+                        minPos.y = std::min(shapeStartPosition.y, endPos.y);
+                        maxPos.y = std::max(shapeStartPosition.y, endPos.y);
                         const Vector2i size = Vector2i(maxPos - minPos + Vector2i(1, 1));
+                        needsUIGraphicsUpdate = true;
 
                         shapeEndPosition = endPos;
                         shapeSize = size;
-                        RenderShapes::getShape(shape, static_cast<ShapeType>(settings.shapeID), size, settings.shapeRadius);
+                        RenderShapes::getShape(shape, static_cast<ShapeType>(config.shapeID), size, config.shapeRadius);
                         shape.setPosition(Vector2f(minPos) + Vector2f(size) / 2.f);
                         shape.setOrigin(Vector2f(shapeSize) / 2.f);
 
@@ -605,8 +657,8 @@ void glxy::ImageEditor::UpdateTool()
             if (lock_guard lock(common.mtxEditorWorkerCommon);
                 common.getTextDraw())
             {
-                textMove.Update(texture, pos, posUI);
-                textRotate.Update(texture, pos, posUI);
+                needsUIGraphicsUpdate |= textMove.Update(coreTexture, pos, posUI);
+                needsUIGraphicsUpdate |= textRotate.Update(coreTexture, pos, posUI);
                 if (textMove.hasChanged() && textMove.getDelta() != Vector2f())
                 {
                     text.move(textMove.getDelta());
@@ -616,7 +668,7 @@ void glxy::ImageEditor::UpdateTool()
                 if (textRotate.hasChanged() && textRotate.getDelta() != Vector2f())
                 {
                     const Vector2f center = text.getTransform().transformPoint(text.getLocalBounds().position + text.getLocalBounds().size / 2.f);
-                    const Angle angle = (mousePosPrevFrame - center).angleTo(pos - center);
+                    const Angle angle = mousePosPrevFrame.has_value() ? (*mousePosPrevFrame - center).angleTo(pos - center) : Angle::Zero;
                     text.rotate(angle);
                     textMove.rotate(angle);
                     textRotate.rotate(angle);
@@ -634,6 +686,7 @@ void glxy::ImageEditor::UpdateTool()
                 {
                     textString.insert(textString.getSize(), U'\n');
                     text.setString(textString);
+                    needsUIGraphicsUpdate = true;
                     UpdateTextUIPosition();
 
                     AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(text), text.getGlobalBounds(), _layerPicker.getLayerIDSelected(arrayID)});
@@ -659,7 +712,7 @@ void glxy::ImageEditor::UpdateTool()
                         break;
                     }
                     text.setString(textString);
-
+                    needsUIGraphicsUpdate = true;
                     UpdateTextUIPosition();
 
                     AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(text), text.getGlobalBounds(), _layerPicker.getLayerIDSelected(arrayID)});
@@ -682,10 +735,10 @@ void glxy::ImageEditor::UpdateTool()
                 hasStartedText = true;
                 unsavedChanges = true;
                 text = Text(*textFont);
-                text.setLetterSpacing(settings.letterSpacing);
-                text.setLineSpacing(settings.lineSpacing);
-                text.setCharacterSize(settings.textSize);
-                switch (settings.textAlignment)
+                text.setLetterSpacing(config.letterSpacing);
+                text.setLineSpacing(config.lineSpacing);
+                text.setCharacterSize(config.textSize);
+                switch (config.textAlignment)
                 {
                 case 0: text.setLineAlignment(Text::LineAlignment::Left); break;
                 case 1: text.setLineAlignment(Text::LineAlignment::Center); break;
@@ -694,15 +747,17 @@ void glxy::ImageEditor::UpdateTool()
                 }
                 text.setFillColor(color1);
                 text.setOutlineColor(color2);
-                text.setOutlineThickness(settings.textOutlineThickness);
-                text.setStyle(settings.textStyle);
-                text.setPosition(Vector2f(floor(pos.x), floor(pos.y)));
+                text.setOutlineThickness(config.textOutlineThickness);
+                text.setStyle(config.textStyle);
+                text.setPosition(Vector2f(std::floor(pos.x), std::floor(pos.y)));
                 text.setString("Type");
 
                 textString.clear();
 
                 textMove.setRotation(Angle::Zero);
                 textRotate.setRotation(Angle::Zero);
+
+                needsUIGraphicsUpdate = true;
 
                 UpdateTextUIPosition();
                 AddWork(CanvasWork::TextPixels{textFont, std::make_shared<Text>(text), text.getGlobalBounds(), _layerPicker.getLayerIDSelected(arrayID)});
@@ -728,17 +783,18 @@ void glxy::ImageEditor::UpdateTool()
                 hasStartedColorSwap = true;
                 unsavedChanges = true;
                 cacheColorSwapPosition = pos;
-                AddWork(CanvasWork::ColorSwapPixels{pos, mousePosPrevFrame, color1, color2, settings.colorSwapRadius, settings.colorSwapTolerance,
+                AddWork(CanvasWork::ColorSwapPixels{pos, mousePosPrevFrame.has_value() ? *mousePosPrevFrame : pos, color1, color2, config.colorSwapRadius, config.colorSwapTolerance,
                     _layerPicker.getLayerIDSelected(arrayID) });
             }
             break;
         }
-        default: break;
+        default:
+            break;
         }
         //cursor
         switch (currentTool)
         {
-        case Tool::MoveSelected:
+        case Tool::MoveSelected: case Tool::MoveSelection:
             if (moveSelectionMove.isSelected() || moveSelectionMoveArea.isSelected())
                 Cursors::setCursor(Cursors::Type::SizeAll, window);
             else if (moveSelectionPoints.at(0).isSelected()) Cursors::setCursor(Cursors::Type::SizeTopLeft, window);
@@ -754,17 +810,20 @@ void glxy::ImageEditor::UpdateTool()
         case Tool::MagicWand:
             if (wandMove.isSelected())
                 Cursors::setCursor(Cursors::Type::SizeAll, window);
+            else Cursors::setCursor(Cursors::Type::Arrow, window);
             break;
         case Tool::Bucket:
             if (bucketFillMove.isSelected())
                 Cursors::setCursor(Cursors::Type::SizeAll, window);
+            else Cursors::setCursor(Cursors::Type::Arrow, window);
             break;
         case Tool::Gradient:
             if (gradientMove.isSelected())
                 Cursors::setCursor(Cursors::Type::SizeAll, window);
+            else Cursors::setCursor(Cursors::Type::Arrow, window);
             break;
         case Tool::Shapes:
-            if (shapeMove.isSelected())
+            if (shapeMove.isSelected() || shapeMoveArea.isSelected())
                 Cursors::setCursor(Cursors::Type::SizeAll, window);
             else if (shapeSizePoints.at(0).isSelected()) Cursors::setCursor(Cursors::Type::SizeTopLeft, window);
             else if (shapeSizePoints.at(1).isSelected()) Cursors::setCursor(Cursors::Type::SizeTop, window);
@@ -789,35 +848,48 @@ void glxy::ImageEditor::UpdateTool()
         switch (currentTool)
         {
         case Tool::Brush: case Tool::Eraser: case Tool::ColorSwap:
-            brushInnerOutline.setPosition(pos);
-            brushOuterOutline.setPosition(pos);
-            brushOuterOutline.setOutlineThickness(windowScale * 3.f);
-            brushInnerOutline.setOutlineThickness(windowScale * 1.5f);
+            if (pos != brushInnerOutline.getPosition() || brushInnerOutline.getOutlineThickness() != windowScale * 1.5f)
+            {
+                brushInnerOutline.setPosition(pos);
+                brushOuterOutline.setPosition(pos);
+                brushOuterOutline.setOutlineThickness(windowScale * 3.f);
+                brushInnerOutline.setOutlineThickness(windowScale * 1.5f);
+                needsUIGraphicsUpdate = true;
+            }
             break;
         case Tool::Pencil: case Tool::Picker:
-            squareInnerOutline.setPosition(Vector2f(floor(pos.x), floor(pos.y)));
-            squareOuterOutline.setPosition(Vector2f(floor(pos.x), floor(pos.y)));
-            squareInnerOutline.setOutlineThickness(-windowScale * 1.5f);
-            squareOuterOutline.setOutlineThickness(-windowScale * 3.f);
+            if (squareInnerOutline.getPosition() != Vector2f(std::floor(pos.x), std::floor(pos.y)) ||
+                squareInnerOutline.getOutlineThickness() != -windowScale * 1.5f)
+            {
+                squareInnerOutline.setPosition(Vector2f(std::floor(pos.x), std::floor(pos.y)));
+                squareOuterOutline.setPosition(Vector2f(std::floor(pos.x), std::floor(pos.y)));
+                squareInnerOutline.setOutlineThickness(-windowScale * 1.5f);
+                squareOuterOutline.setOutlineThickness(-windowScale * 3.f);
+                needsUIGraphicsUpdate = true;
+            }
             break;
         case Tool::Bucket:
             if (lock_guard lock(common.mtxEditorWorkerCommon);
-                common.getBucketFill())
+                common.getBucketFill() && (Vector2f(bucketFillPosition) != squareInnerOutline.getPosition() ||
+                squareInnerOutline.getOutlineThickness() != -windowScale * 1.5f))
             {
                 squareInnerOutline.setPosition(Vector2f(bucketFillPosition));
                 squareOuterOutline.setPosition(Vector2f(bucketFillPosition));
                 squareInnerOutline.setOutlineThickness(-windowScale * 1.5f);
                 squareOuterOutline.setOutlineThickness(-windowScale * 3.f);
+                needsUIGraphicsUpdate = true;
             }
             break;
         case Tool::MagicWand:
             if (lock_guard lock(common.mtxEditorWorkerCommon);
-                common.getWandFill())
+                common.getWandFill() && Vector2f(wandFillPosition) != squareInnerOutline.getPosition() ||
+                squareInnerOutline.getOutlineThickness() != -windowScale * 1.5f)
             {
                 squareInnerOutline.setPosition(Vector2f(wandFillPosition));
                 squareOuterOutline.setPosition(Vector2f(wandFillPosition));
                 squareInnerOutline.setOutlineThickness(-windowScale * 1.5f);
                 squareOuterOutline.setOutlineThickness(-windowScale * 3.f);
+                needsUIGraphicsUpdate = true;
             }
             break;
         default:
@@ -826,6 +898,17 @@ void glxy::ImageEditor::UpdateTool()
         //update layer preview
         switch (currentTool)
         {
+        case Tool::Zoom:
+            if (bothNotPressed && hasStartedZoom)
+                hasStartedZoom = false;
+            break;
+        case Tool::Pencil:
+            if (bothNotPressed && hasStartedPencil)
+            {
+                hasStartedPencil = false;
+                AddWork(CanvasWork::FinishPencil{});
+            }
+            break;
         case Tool::Brush:
             if (bothNotPressed && hasStartedBrush)
             {
@@ -872,13 +955,58 @@ void glxy::ImageEditor::UpdateTool()
         default:
             break;
         }
+
     }
+    //Save previous tool boolean state for proper UI updating
+    lock_guard lock(common.mtxEditorWorkerCommon);
+    switch (currentTool)
+    {
+    case Tool::MoveSelected:
+        needsUIGraphicsUpdate |= lastWorkerToolState != common.getMoveSelected();
+        lastWorkerToolState = common.getMoveSelected();
+        break;
+    case Tool::MoveSelection:
+        needsUIGraphicsUpdate |= lastWorkerToolState != common.getMoveSelection();
+        lastWorkerToolState = common.getMoveSelection();
+        break;
+    case Tool::Gradient:
+        needsUIGraphicsUpdate |= lastWorkerToolState != common.getGradientDraw();
+        lastWorkerToolState = common.getGradientDraw();
+        break;
+    case Tool::Bucket:
+        needsUIGraphicsUpdate |= lastWorkerToolState != common.getBucketFill();
+        lastWorkerToolState = common.getBucketFill();
+        break;
+    case Tool::Shapes:
+        needsUIGraphicsUpdate |= lastWorkerToolState != common.getShapeDraw();
+        lastWorkerToolState = common.getShapeDraw();
+        break;
+    case Tool::MagicWand:
+        needsUIGraphicsUpdate |= lastWorkerToolState != common.getWandFill();
+        lastWorkerToolState = common.getWandFill();
+        break;
+    case Tool::Text:
+        needsUIGraphicsUpdate |= lastWorkerToolState != common.getTextDraw();
+        lastWorkerToolState = common.getTextDraw();
+        break;
+    default:
+        break;
+    }
+#ifdef SFML_MOBILE
+    if (!InputEvent::isTouchPressed(0))
+    {
+        mouseScreenPosPrevFrame.reset();
+        mousePosPrevFrame.reset();
+        return;
+    }
+#endif
+    mouseScreenPosPrevFrame = posScreen;
     mousePosPrevFrame = pos;
 }
 
-void glxy::ImageEditor::UpdateEditorTextures()
-{
-    Clock timeLimit;
+void glxy::ImageEditor::UpdateEditorTextures() {
+    static uint32_t frameID = 0;
+    frameID++;
     if (!chunkManager.mtxChunkManager.try_lock())
     {
         chunksUpToDate = false;
@@ -895,25 +1023,49 @@ void glxy::ImageEditor::UpdateEditorTextures()
 
     common.mtxEditorWorkerCommon.lock();
     const bool moveSelection = common.getMoveSelected();
+    const bool circularShift = common.getCircularShift();
     common.mtxEditorWorkerCommon.unlock();
+    vector<Vector2i> chunksToUpdate;
+    vector<Vector2i> chunksToCheck;
     bool updatedAnySelection = false;
     bool updatedAnyColor = false;
     chunksUpToDate = true;
     chunkManager.ForEachChunkID([&](const Vector2i i)
     {
-        if (timeLimit.getElapsedTime().asMilliseconds() > 10)
-        {
-            chunksUpToDate = false;
-            return;
-        }
-        if (!chunkManager.chunkExists(i))
-            return;
-        if (!chunkTextureManager.chunkExists(i))
-            return;
         if (!chunkManager.getChunkMutex(i).try_lock())
         {
             chunksUpToDate = false;
             return;
+        }
+        if (chunkManager.needsUpdateColorLow(i) || chunkManager.needsUpdateColorMedium(i) ||
+            chunkManager.needsUpdateColorNative(i) || chunkManager.needsUpdateSelection(i) || chunkManager.needsUpdateSelectionTemp(i))
+            chunksToUpdate.push_back(i);
+        else
+            chunksToCheck.push_back(i);
+        chunkManager.getChunkMutex(i).unlock();
+    });
+    if (!chunkManager.isInfinite() || chunkManager.getChunkCountTotal() < 256)
+        sort(chunksToUpdate.begin(), chunksToUpdate.end(), [&](const Vector2i a, const Vector2i b)
+        {
+            return chunkManager.getLastUpdated(a) < chunkManager.getLastUpdated(b);
+        });
+    chunksToUpdate.insert(chunksToUpdate.end(), chunksToCheck.begin(), chunksToCheck.end());
+    Clock timeLimit;
+    for (const Vector2i i : chunksToUpdate)
+    {
+        if (timeLimit.getElapsedTime().asMilliseconds() > 10)
+        {
+            chunksUpToDate = false;
+            break;
+        }
+        if (!chunkManager.chunkExists(i))
+            continue;
+        if (!chunkTextureManager.chunkExists(i))
+            continue;
+        if (!chunkManager.getChunkMutex(i).try_lock())
+        {
+            chunksUpToDate = false;
+            continue;
         }
         if (chunkManager.needsUpdateSelection(i))
         {
@@ -921,8 +1073,8 @@ void glxy::ImageEditor::UpdateEditorTextures()
                 chunkTextureManager.MakeSelectionChunk(i);
             else
                 chunkTextureManager.DeleteSelectionChunk(i);
-            chunkTextureManager.MakeSelectionChunk(i);
             updatedAnySelection = true;
+            needsUIGraphicsUpdate = true;
         }
         if (chunkManager.needsUpdateSelectionTemp(i))
         {
@@ -931,11 +1083,13 @@ void glxy::ImageEditor::UpdateEditorTextures()
             else
                 chunkTextureManager.DeleteSelectionTempChunk(i);
             updatedAnySelection = true;
+            needsUIGraphicsUpdate = true;
         }
         if (chunkManager.needsUpdateColorLow(i))
         {
-            chunkTextureManager.RenderLQChunk(i, moveSelection, _layerPicker.getLayerIDSelected(arrayID));
+            chunkTextureManager.RenderLQChunk(i, moveSelection, _layerPicker.getLayerIDSelected(arrayID), circularShift);
             updatedAnyColor = true;
+            needsCoreGraphicsUpdate = true;
         }
         const FloatRect drawBox = FloatRect(view.getCenter() - view.getSize() / 2.f, view.getSize());
 
@@ -943,107 +1097,106 @@ void glxy::ImageEditor::UpdateEditorTextures()
             Vector2f(chunkSize, chunkSize)).findIntersection(drawBox).has_value() || windowScale >= c_chunkSwitchLow)
         {
             if (chunkTextureManager.getChunkMediumTexture(i))
+            {
                 chunkTextureManager.DeleteMQChunk(i);
+                needsCoreGraphicsUpdate = true;
+            }
         }
         else if (!chunkTextureManager.getChunkMediumTexture(i) || chunkManager.needsUpdateColorMedium(i))
         {
-            chunkTextureManager.RenderMQChunk(i, moveSelection, _layerPicker.getLayerIDSelected(arrayID));
+            chunkTextureManager.RenderMQChunk(i, moveSelection, _layerPicker.getLayerIDSelected(arrayID), circularShift);
             updatedAnyColor = true;
+            needsCoreGraphicsUpdate = true;
         }
 
         if (!FloatRect(Vector2f(i) * static_cast<float>(chunkSize),
             Vector2f(chunkSize, chunkSize)).findIntersection(drawBox).has_value() || windowScale >= c_chunkSwitchMedium)
         {
             if (chunkTextureManager.getChunkNativeTexture(i))
+            {
                 chunkTextureManager.DeleteNQChunk(i);
+                needsCoreGraphicsUpdate = true;
+            }
         }
         else if (!chunkTextureManager.getChunkNativeTexture(i) || chunkManager.needsUpdateColorNative(i))
         {
-            chunkTextureManager.RenderNQChunk(i, moveSelection, _layerPicker.getLayerIDSelected(arrayID));
+            chunkTextureManager.RenderNQChunk(i, moveSelection, _layerPicker.getLayerIDSelected(arrayID), circularShift);
             updatedAnyColor = true;
+            needsCoreGraphicsUpdate = true;
         }
         if (chunkTextureManager.getChunkNativeTexture(i))
             chunkTextureManager.MakeNQSmooth(i, windowScale >= c_chunkSwitchSmooth);
+        chunkManager.setLastUpdated(i, frameID);
         chunkManager.getChunkMutex(i).unlock();
-    });
+    }
     if (updatedAnyColor)
         UpdateLayerPreview();
     chunkManager.mtxChunkVector.unlock();
+}
+
+void glxy::ImageEditor::onResize()
+{
+    const Vector2f imageSize = Vector2f(ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize,
+        ImGui::GetContentRegionAvail().y - ImGui::GetTextLineHeightWithSpacing() - ImGui::GetStyle().ScrollbarSize);
+
+    viewArea = FloatRect({ ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMin().x, ImGui::GetWindowPos().y + ImGui::GetWindowContentRegionMin().y }, { imageSize });
+
+    //on ImGui window resize
+    if (windowSize != viewArea.size)
+    {
+        if (windowScale == 0.f)
+            windowScale = 1.2f / getBestFitSize();
+        if (config.animateZoom)
+        {
+            cameraOriginalPos = view.getCenter();
+            cameraOriginalSize = view.getSize();
+            cameraAnimation = Time::Zero;
+            cameraAnimationRunning = true;
+        }
+
+        view.setSize({ imageSize.x * windowScale, imageSize.y * windowScale });
+
+        if (config.animateZoom)
+        {
+            cameraTargetPos = view.getCenter();
+            cameraTargetSize = view.getSize();
+        }
+        Vector2f size;
+        if (view.getSize().x > view.getSize().y)
+        {
+            size.x = 1;
+            size.y = 1 * (view.getSize().y / view.getSize().x);
+        }
+        else
+        {
+            size.y = 1;
+            size.x = 1 * (view.getSize().x / view.getSize().y);
+        }
+        viewUI.setSize(size);
+        windowSize = imageSize;
+        rulerUI.manualChange = true;
+        validate(coreTexture.resize(Vector2u(windowSize), ContextSettings({0, 8, config.antialiasing})));
+        validate(UITexture.resize(Vector2u(windowSize), ContextSettings({0, 8, config.antialiasing})));
+        needsCoreGraphicsUpdate = true;
+        needsUIGraphicsUpdate = true;
+    }
 }
 
 void glxy::ImageEditor::Update()
 {
     if (!initComplete)
         return;
-    static bool onMouseClick = false;
-    static bool middleClickPan = false;
-    const bool panButtonPressed =
-        (settings.panMouseButton == 0 && InputEvent::isButtonPressed(Mouse::Button::Middle) ||
-        settings.panMouseButton == 1 && InputEvent::isButtonPressed(Mouse::Button::Extra1) ||
-        settings.panMouseButton == 2 && InputEvent::isButtonPressed(Mouse::Button::Extra2) ||
-        InputEvent::isTouchPressed(0) && InputEvent::isTouchPressed(1)) ||
-        (currentTool == Tool::Pan && (InputEvent::isButtonPressed(Mouse::Button::Left) || InputEvent::isButtonPressed(Mouse::Button::Right)
-            || InputEvent::isTouchPressed(0)));
-#ifdef SFML_DESKTOP
-    const Vector2i InputCursorPosition = InputEvent::getMousePosition();
-#else
-    const Vector2i InputCursorPosition = InputEvent::getTouchPosition(0);
-#endif
 
     ImGui::SetNextWindowDockID(dockID, ImGuiCond_Once);
-    if (ImGui::Begin((getImageName() + "##ImageEditor" + to_string(editorID)).c_str(), &windowOpen, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoScrollWithMouse | (unsavedChanges ? ImGuiWindowFlags_UnsavedDocument : 0)))
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Vector2f(0, 0));
+    if (ImGui::Begin((getImageName() + "##ImageEditor" + to_string(editorID)).c_str(), &windowOpen,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
+        (unsavedChanges ? ImGuiWindowFlags_UnsavedDocument : 0)))
     {
         windowArea = FloatRect(ImGui::GetWindowPos(), ImGui::GetWindowSize());
-        if (!onMouseClick && panButtonPressed &&
-            viewArea.contains(static_cast<Vector2f>(InputCursorPosition)))
-        {
-            prevPanPos = InputCursorPosition;
-            onMouseClick = true;
-        }
-        const Vector2f imageSize = Vector2f(ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize * settings.GUIScale,
-            ImGui::GetContentRegionAvail().y - (15 + ImGui::GetStyle().ScrollbarSize) * settings.GUIScale);
-
-        viewArea = FloatRect({ ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMin().x, ImGui::GetWindowPos().y + ImGui::GetWindowContentRegionMin().y }, { imageSize });
-
-        //on ImGui window resize
-        if (windowSize != imageSize)
-        {
-            if (windowScale == 0.f)
-                windowScale = 1.2f / getBestFitSize();
-            if (settings.animateZoom)
-            {
-                cameraOriginalPos = view.getCenter();
-                cameraOriginalSize = view.getSize();
-                cameraAnimation = Time::Zero;
-                cameraAnimationRunning = true;
-            }
-
-            view.setSize({ imageSize.x * windowScale, imageSize.y * windowScale });
-
-            if (settings.animateZoom)
-            {
-                cameraTargetPos = view.getCenter();
-                cameraTargetSize = view.getSize();
-            }
-            Vector2f size;
-            if (view.getSize().x > view.getSize().y)
-            {
-                size.x = 1;
-                size.y = 1 * (view.getSize().y / view.getSize().x);
-            }
-            else
-            {
-                size.y = 1;
-                size.x = 1 * (view.getSize().x / view.getSize().y);
-            }
-            viewUI.setSize(size);
-            windowSize = imageSize;
-            rulerUI.manualChange = true;
-            validate(texture.resize(Vector2u(imageSize), ContextSettings({0, 8, settings.antialiasing})));
-        }
+        onResize();
         UpdateZoom();
-        if (viewHovered && !panButtonPressed && !anyEditorUIElementHovered())
+        if (viewHovered && !anyEditorUIElementHovered())
         {
             switch (currentTool)
             {
@@ -1062,58 +1215,28 @@ void glxy::ImageEditor::Update()
             case Tool::Picker:
                 Cursors::setCursor(Cursors::Type::Picker, window);
                 break;
-            case Tool::Bucket: case Tool::Gradient: case Tool::MagicWand:
+            case Tool::Brush:
+                Cursors::setCursor(Cursors::Type::Brush, window);
+                break;
+            case Tool::Eraser:
+                Cursors::setCursor(Cursors::Type::Eraser, window);
+                break;
+            case Tool::Bucket: case Tool::Gradient: case Tool::MagicWand: case Tool::ColorSwap: case Tool::Zoom:
+                case Tool::MoveSelected: case Tool::MoveSelection:
                 Cursors::setCursor(Cursors::Type::Arrow, window);
                 break;
+            case Tool::Pan:
+                Cursors::setCursor(Cursors::Type::Hand, window);
             default:
                 break;
             }
+        }
 
-        }
-        if (!panButtonPressed)
-        {
-            middleClickPan = false;
-            onMouseClick = false;
-        }
-#ifdef SFML_DESKTOP
-        if (viewHovered && windowFocused && middleClickPan && panButtonPressed)
-        {
-            const Vector2i pos = InputCursorPosition;
-            Vector2i newPos = pos;
-            if (pos.x < viewArea.position.x)
-                newPos = Vector2i(viewArea.position.x + viewArea.size.x, pos.y);
-            else if (pos.x >= viewArea.position.x + viewArea.size.x)
-                newPos = Vector2i(viewArea.position.x, pos.y);
-            if (pos.y < viewArea.position.y)
-                newPos = Vector2i(pos.x, viewArea.position.y + viewArea.size.y);
-            else if (pos.y >= viewArea.position.y + viewArea.size.y)
-                newPos = Vector2i(pos.x, viewArea.position.y);
-            if (newPos != pos)
-            {
-                InputEvent::setMousePosition(newPos, window);
-                prevPanPos = newPos;
-            }
-        }
-#endif
         windowHovered = ImGui::IsWindowHovered();
         windowFocused = ImGui::IsWindowFocused();
-        if (viewHovered && !windowFocused)
-        {
-            if (panButtonPressed)
-                ImGui::SetWindowFocus();
-        }
+
         if (windowFocused && (viewHovered || wasHoveredUponAction))
         {
-            //move
-            if (viewArea.contains(static_cast<Vector2f>(InputCursorPosition)) && panButtonPressed)
-            {
-                middleClickPan = true;
-                const Vector2i moveDir = prevPanPos - InputCursorPosition;
-                if (moveDir.x != 0 && moveDir.y != 0)
-                    Cursors::setCursor(Cursors::Type::SizeAll, window);
-                MoveView(static_cast<Vector2f>(moveDir) * windowScale);
-            }
-            prevPanPos = InputCursorPosition;
             if (InputEvent::noSpecialPressed() && !GLOBAL.wantInput && !wantInput)
             {
                 if (InputEvent::isKeyHeld(Keyboard::Key::A) || InputEvent::isKeyHeld(Keyboard::Key::Left))
@@ -1126,6 +1249,8 @@ void glxy::ImageEditor::Update()
                     MoveView({ 0.f, c_keyViewMove * windowScale });
             }
             moveViewHitRate += TimeControl::DeltaReal();
+
+            //Move view if on edge of screen
             if (moveViewHitRate.asSeconds() > 0.1f && (InputEvent::isButtonPressed(Mouse::Button::Left) || InputEvent::isButtonPressed(Mouse::Button::Right)
                 || InputEvent::isTouchPressed(0)))
             {
@@ -1160,45 +1285,65 @@ void glxy::ImageEditor::Update()
 
         if (windowScale < 0.25f)
             gridLines.Update(view, getSize(), isInfinite, windowScale);
-        rulerUI.Update(imageSize, getSFMLViewCursorPos(viewArea, view));
+        if (rulerUI.Update(windowSize, getSFMLViewCursorPos(viewArea, view)))
+            needsUIGraphicsUpdate = true;
 
         animCenter.Update();
         animOutline.Update();
         chunkTextureManager.Update();
 
+        if (lock_guard lock(common.mtxEditorWorkerCommon);
+            chunkManager.hasStartedSelect() || !chunkManager.getFinalSelectionBounds().expired() ||
+            chunkManager.anyHasSelectionTempLayer() || common.getNewMoveSelectArea() != IntRect())
+            needsUIGraphicsUpdate = true;
+
         UpdateTool();
         UpdateEditorTextures();
 
-        if (!isInfinite)
-            texture.clear(settings.bgColor);
-        else
-            texture.clear(chunkManager.getBackgroundColor());
-        Draw();
-        texture.display();
-        texture.setSmooth(true);
+        if (needsCoreGraphicsUpdate)
+        {
+            needsCoreGraphicsUpdate = false;
+            if (!isInfinite)
+                coreTexture.clear(config.bgColor);
+            else
+                coreTexture.clear(chunkManager.getBackgroundColor());
+            Draw();
+            coreTexture.display();
+            coreTexture.setSmooth(true);
+        }
+
+        if (needsUIGraphicsUpdate)
+        {
+            needsUIGraphicsUpdate = false;
+            UITexture.clear(Color(128, 128, 128, 0));
+            DrawUI();
+            UITexture.display();
+            UITexture.setSmooth(true);
+        }
 
         ImGui::PushStyleVarY(ImGuiStyleVar_ItemSpacing, 0);
-        ImGui::Image(texture);
+        const Vector2f cursor = ImGui::GetCursorPos();
+        ImGui::Image(coreTexture);
+        ImGui::SetCursorPos(cursor);
+        ImGui::Image(UITexture);
 
-        viewHovered = ImGui::IsItemHovered();
+        viewHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup);
 
         scrollBarScroll = Vector2f(view.getCenter().x / getSize().x, 1 - view.getCenter().y / getSize().y);
 
         ImGui::BeginDisabled(view.getSize().y / (getSize().y + view.getSize().y) >= 0.95f &&
             view.getSize().x / (getSize().x + view.getSize().x) >= 0.95f);
         ImGui::SameLine(0, 0);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0);
-        ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 9);
-        ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, max(20.f, view.getSize().y / (getSize().y + view.getSize().y) * ImGui::GetContentRegionAvail().y));
+        ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, std::max(20.f, view.getSize().y / (getSize().y + view.getSize().y) * ImGui::GetContentRegionAvail().y));
         const float sliderSizeX = ImGui::GetContentRegionAvail().x;
         if (ImGui::VSliderFloat(("###ScrollV" + to_string(editorID)).c_str(), Vector2f(ImGui::GetContentRegionAvail().x,
-            imageSize.y), &scrollBarScroll.y, 0, 1, "", ImGuiSliderFlags_NoInput))
+            windowSize.y), &scrollBarScroll.y, 0, 1, "", ImGuiSliderFlags_NoInput))
         {
             setViewPositionY((1 - scrollBarScroll.y) * getSize().y);
         }
         ImGui::PopStyleVar(1);
 
-        ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, max(20.f, view.getSize().x / (getSize().x + view.getSize().x) * ImGui::GetContentRegionAvail().x));
+        ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, std::max(20.f, view.getSize().x / (getSize().x + view.getSize().x) * ImGui::GetContentRegionAvail().x));
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0);
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - sliderSizeX);
@@ -1206,23 +1351,26 @@ void glxy::ImageEditor::Update()
         {
             setViewPositionX(scrollBarScroll.x * getSize().x);
         }
-        ImGui::PopStyleVar(5);
+        ImGui::PopStyleVar(3);
         ImGui::EndDisabled();
 
         std::ostringstream oss;
-        if (isInfinite)
-            oss << static_cast<int32_t>(100.f / windowScale) << " % -- [X " << static_cast<int32_t>(floor(mousePosPrevFrame.x)) << ", Y " <<
-                static_cast<int32_t>(floor(mousePosPrevFrame.y)) << "]";
-        else
-            oss << static_cast<int32_t>(100.f / windowScale) << " % -- [X " << static_cast<int32_t>(floor(mousePosPrevFrame.x)) << ", Y " <<
-                static_cast<int32_t>(floor(mousePosPrevFrame.y)) << "] -- [W " << getSize().x << " x H " << getSize().y << "]";
+        if (mousePosPrevFrame.has_value())
+        {
+            if (isInfinite)
+                oss << static_cast<int32_t>(100.f / windowScale) << " % -- [X " << static_cast<int32_t>(floor(mousePosPrevFrame->x)) << ", Y " <<
+                    static_cast<int32_t>(floor(mousePosPrevFrame->y)) << "]";
+            else
+                oss << static_cast<int32_t>(100.f / windowScale) << " % -- [X " << static_cast<int32_t>(floor(mousePosPrevFrame->x)) << ", Y " <<
+                    static_cast<int32_t>(floor(mousePosPrevFrame->y)) << "] -- [W " << getSize().x << " x H " << getSize().y << "]";
+        }
         const string textBox = oss.str();
         const float offset = ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(textBox.c_str()).x;
         const IntRect bounds = chunkManager.getBoxSelectArea();
         switch (currentTool)
         {
         case Tool::BoxSelect: case Tool::CircleSelect:
-            if (chunkManager.anyHasSelectionLayer() || chunkManager.hasStartedSelect())
+            if (!chunkManager.getFinalSelectionBounds().expired() || chunkManager.hasStartedSelect())
             {
                 ImGui::Text("%s:", "Box area"_C);
                 ImGui::SameLine();
@@ -1285,4 +1433,5 @@ void glxy::ImageEditor::Update()
         ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive), "%s", textBox.c_str());
     }
     ImGui::End();
+    ImGui::PopStyleVar();
 }

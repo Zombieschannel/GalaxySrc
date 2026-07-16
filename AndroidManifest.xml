@@ -18,9 +18,8 @@
         android:label="Galaxy">
         <activity
             android:name="android.app.NativeActivity"
-            android:configChanges="orientation|keyboardHidden"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
-            android:screenOrientation="sensorLandscape"
             android:hardwareAccelerated="true"
             android:theme="@style/AppTheme">
 

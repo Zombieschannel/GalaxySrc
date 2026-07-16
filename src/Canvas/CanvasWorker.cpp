@@ -127,14 +127,16 @@ void glxy::CanvasWorker::Main()
                     workTodo.front().get<CanvasWork::EndSelect>() && workTodo.at(1).get<CanvasWork::EndSelect>() ||
                     workTodo.front().get<CanvasWork::MovePixels>() && workTodo.at(1).get<CanvasWork::MovePixels>() ||
                     workTodo.front().get<CanvasWork::MoveSelection>() && workTodo.at(1).get<CanvasWork::MoveSelection>() ||
-                    workTodo.front().get<CanvasWork::TransformImage>() && workTodo.at(1).get<CanvasWork::TransformImage>())
+                    workTodo.front().get<CanvasWork::TransformImage>() && workTodo.at(1).get<CanvasWork::TransformImage>() ||
+                    workTodo.front().get<CanvasWork::CircularShift>() && workTodo.at(1).get<CanvasWork::CircularShift>())
                 {
                     workTodo.erase(workTodo.begin());
                     sameWork = false;
                     continue;
                 }
                 if (workTodo.size() > 5 &&
-                    (workTodo.front().get<CanvasWork::BrushPixels>() && workTodo.at(1).get<CanvasWork::BrushPixels>() ||
+                    (workTodo.front().get<CanvasWork::PencilPixels>() && workTodo.at(1).get<CanvasWork::PencilPixels>() ||
+                    workTodo.front().get<CanvasWork::BrushPixels>() && workTodo.at(1).get<CanvasWork::BrushPixels>() ||
                     workTodo.front().get<CanvasWork::EraserPixels>() && workTodo.at(1).get<CanvasWork::EraserPixels>()) ||
                     workTodo.front().get<CanvasWork::ColorSwapPixels>() && workTodo.at(1).get<CanvasWork::ColorSwapPixels>())
                 {
@@ -146,6 +148,14 @@ void glxy::CanvasWorker::Main()
 
                     for (; i >= 0; i--)
                     {
+                        if (workTodo.front().get<CanvasWork::PencilPixels>())
+                        {
+                            const auto* src = workTodo.front().get<CanvasWork::PencilPixels>();
+                            auto* dst = workTodo.at(1).modify<CanvasWork::PencilPixels>();
+                            if (!src || !dst)
+                                break;
+                            dst->end = src->end;
+                        }
                         if (workTodo.front().get<CanvasWork::BrushPixels>())
                         {
                             const auto* src = workTodo.front().get<CanvasWork::BrushPixels>();
@@ -245,7 +255,7 @@ void glxy::CanvasWorker::Main()
                 ie->OptionCancel();
             else if (work.get<CanvasWork::Finish>())
                 ie->OptionFinish();
-            else if (work.get<CanvasWork::FinishBrush>())
+            else if (work.get<CanvasWork::FinishBrush>() || work.get<CanvasWork::FinishPencil>())
                 ie->MergeColorTempLayer(ie->workingLayer, BlendAlpha);
             else if (work.get<CanvasWork::FinishEraser>())
                 ie->MergeColorTempLayer(ie->workingLayer, BlendMultiply);
@@ -259,7 +269,7 @@ void glxy::CanvasWorker::Main()
             {
                 ie->workingLayer = v->layerID;
                 ie->OptionPasteFromClipboard(*v->image, *v->location, *v->selection);
-                ie->MovePixels(v->transform);
+                ie->MovePixels(v->transform, v->smooth);
             }
             else if (const auto v = work.get<CanvasWork::SelectArea>())
                 ie->OptionSelectArea(v->area);
@@ -273,6 +283,11 @@ void glxy::CanvasWorker::Main()
             {
                 ie->workingLayer = v->layerID;
                 ie->OptionSetupTransformImage(v->layerID);
+            }
+            else if (const auto v = work.get<CanvasWork::CircularShiftSetup>())
+            {
+                ie->workingLayer = v->layerID;
+                ie->OptionSetupCircularShift();
             }
             else if (const auto v = work.get<CanvasWork::Adjustment>())
             {
@@ -307,21 +322,23 @@ void glxy::CanvasWorker::Main()
             else if (const auto v = work.get<CanvasWork::ResizeCanvas>())
                 ie->ResizeCanvas(v->size, v->pivot);
             else if (const auto v = work.get<CanvasWork::TransformImage>())
-                ie->OptionTransformImage(v->pos, v->rot, v->scale, v->origin, v->tile);
+                ie->OptionTransformImage(v->pos, v->rot, v->scale, v->origin, v->repeat, v->smooth);
+            else if (const auto v = work.get<CanvasWork::CircularShift>())
+                ie->OptionCircularShift(v->shift, v->horizontal, v->groupSize);
             else if (const auto v = work.get<CanvasWork::PencilPixels>())
             {
                 ie->workingLayer = v->layerID;
-                ie->PencilPixels(v->start, v->end, v->color, v->layerID);
+                ie->PencilPixels(v->start, v->end, v->color);
             }
             else if (const auto v = work.get<CanvasWork::BrushPixels>())
             {
                 ie->workingLayer = v->layerID;
-                ie->BrushPixels(v->start, v->end, v->radius, v->color, v->layerID, false);
+                ie->BrushPixels(v->start, v->end, v->radius, v->color, false);
             }
             else if (const auto v = work.get<CanvasWork::EraserPixels>())
             {
                 ie->workingLayer = v->layerID;
-                ie->BrushPixels(v->start, v->end, v->radius, Color::Transparent, v->layerID, true);
+                ie->BrushPixels(v->start, v->end, v->radius, Color::Transparent, true);
             }
             else if (const auto v = work.get<CanvasWork::ColorSwapPixels>())
             {
@@ -336,7 +353,7 @@ void glxy::CanvasWorker::Main()
             else if (const auto v = work.get<CanvasWork::BeginSelect>())
                 ie->BeginSelect(v->pos, v->selectMode, v->type, v->keepAspect);
             else if (const auto v = work.get<CanvasWork::EndSelect>())
-                ie->EndSelect(v->pos, v->type);
+                ie->EndSelect(v->pos);
             else if (const auto v = work.get<CanvasWork::BucketFill>())
             {
                 {
@@ -389,7 +406,7 @@ void glxy::CanvasWorker::Main()
                     ie->moveSelected = true;
                 }
                 Transform transform(v->transform);
-                ie->MovePixels(transform.scale(v->scale));
+                ie->MovePixels(transform.scale(v->scale), v->smooth);
             }
             else if (const auto v = work.get<CanvasWork::MoveSelection>())
             {
@@ -417,7 +434,7 @@ void glxy::CanvasWorker::Main()
                     ie->shapeDraw = true;
                 }
                 ie->workingLayer = v->layerID;
-                ie->ShapePixels(v->shape, v->layerID);
+                ie->ShapePixels(v->shape);
 
             }
             else if (const auto v = work.get<CanvasWork::TextPixels>())
@@ -427,7 +444,8 @@ void glxy::CanvasWorker::Main()
                     ie->textDraw = true;
                 }
                 ie->workingLayer = v->layerID;
-                ie->TextPixels(v->text, v->globalBounds, v->layerID);
+                //Bug in SFML 3.1.0 - wrong global bounds for any text alignment other than left
+                ie->TextPixels(v->text, v->text->getLineAlignment() == Text::LineAlignment::Left ? v->globalBounds : FloatRect(Vector2f(0, 0), Vector2f(ie->getSize())));
             }
         }
 

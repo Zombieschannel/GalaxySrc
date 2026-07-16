@@ -7,7 +7,3 @@
 #define ID_RES6							106
 #define ID_RES7							107
 #define ID_RES8							108
-#define ID_RES9							109
-#define ID_RES10						110
-#define ID_RES11						111
-#define ID_RES12						112

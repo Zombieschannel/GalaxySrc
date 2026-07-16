@@ -36,9 +36,8 @@ namespace glxy
         bool additiveSelection = true;
 
         uint8_t tempLayerBlendMode = getBlendMode(BlendAlpha);
-        Color backgroundColor = Color::White;
+        Color backgroundColor = Color::Transparent;
 
-        static int32_t modneg(int32_t a, int32_t b);
 
     public:
         mutable std::mutex mtxChunkVector;
@@ -58,6 +57,9 @@ namespace glxy
         bool getPixelSelection(Vector2i coord) const;
         bool getPixelSelectionTemp(Vector2i coord) const;
 
+        uint32_t getLastUpdated(ChunkID chunkID) const;
+        void setLastUpdated(ChunkID chunkID, uint32_t time) const;
+
         Vector2u getChunkCount() const;
         uint32_t getChunkCountTotal() const;
         Vector2u getChunkSize(ChunkID chunkID) const;
@@ -76,7 +78,7 @@ namespace glxy
         std::mutex& getChunkMutex(ChunkID chunkID) const;
 
         bool hasSelectionLayer(ChunkID chunkID) const;
-        bool anyHasSelectionLayer() const;
+        bool allHaveSelectionLayer() const;
         bool hasSelectionTempLayer(ChunkID chunkID) const;
         bool anyHasSelectionTempLayer() const;
         bool hasColorTempLayer(ChunkID chunkID) const;
@@ -138,15 +140,17 @@ namespace glxy
         void clearColorTempLayer(Color color, ChunkID chunkID);
         void deleteColorTempLayerAll();
 
-        void createSelectionLayerAll();
-        void clearSelectionLayerAll(bool state) const;
+
+        void createSelectionLayer(ChunkID chunkID);
+        void clearSelectionLayer(bool state, ChunkID chunkID) const;
         void deleteSelectionLayerAll();
 
         void createSelectionTempLayerAll();
         void clearSelectionTempLayerAll();
         void deleteSelectionTempLayerAll();
 
-        void addLayer(LayerID layerID, Color color = Color::Transparent);
+        void addLayer(LayerID layerID);
+        void clearLayer(LayerID layerID, Color color = Color::Transparent);
         void duplicateLayer(LayerID layerID);
         void deleteLayer(LayerID layerID);
         void moveLayerUp(LayerID layerID);

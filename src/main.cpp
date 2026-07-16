@@ -21,7 +21,7 @@ void setWorkingDirectory()
     {
         string path;
         path.resize(length);
-        wai_getExecutablePath(&path[0], length, &dirName_length);
+        wai_getExecutablePath(path.data(), length, &dirName_length);
         path.resize(dirName_length);
 
 #ifdef SFML_SYSTEM_MACOS
@@ -33,10 +33,7 @@ void setWorkingDirectory()
     }
 }
 #else
-void setWorkingDirectory()
-{
-
-}
+void setWorkingDirectory() {}
 #endif
 
 #ifdef SFML_SYSTEM_LINUX

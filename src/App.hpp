@@ -5,9 +5,8 @@
 #include <filesystem>
 #include <set>
 #include <thread>
-#include "Processing/AdjustmentSettings.hpp"
-#include "Processing/EffectSettings.hpp"
-#include "AppSettings.hpp"
+#include "Processing/AdjustmentEffectConfig.hpp"
+#include "Config.hpp"
 #include "Canvas/CanvasWorker.hpp"
 #include "Const.hpp"
 #include "ZEditorsCommon/ZTB.hpp"
@@ -15,6 +14,7 @@
 #include "Pickers/ColorPicker.hpp"
 #include "Pickers/LayerPicker.hpp"
 #include "Pickers/ToolPicker.hpp"
+#include "ZEditorsCommon/FileExplorer.hpp"
 
 using namespace sf;
 
@@ -33,18 +33,17 @@ namespace glxy
         Vector2u clipboardLocation;
 
         ImGuiID mainDockID = 0;
-        float subTitleBarHeight = 0;
         EditorID editorCloseAttempt = -1;
         Adjustments targetAdjustment;
         Effects targetEffect;
+        FileExplorer fileExplorer;
 
         ColorPicker _colorPicker;
         ToolPicker _toolPicker;
         LayerPicker _layerPicker;
 
-        AppSettings settings;
-        AdjustmentSettings adjSettings;
-        EffectSettings effSettings;
+        Config& config = Config::get();
+        AdjustmentEffectConfig& adjEffConfig = AdjustmentEffectConfig::get();
 
         string mainFontData;
         Font mainFont;
@@ -58,13 +57,11 @@ namespace glxy
         Image windowLogo;
         Texture windowLogoTexture;
         Clock pdo;
-        Texture canvasIcons;
+        Texture actionIcons;
         Texture layerIcons;
         Texture textIcons;
         Texture toolIcons;
         Texture setupSelect;
-        Texture gizmoIcons;
-        Texture finalizeIcons;
         Texture shapeTextures;
         Texture menuIcons;
 
@@ -86,13 +83,14 @@ namespace glxy
         template <typename T>
         void AddWorkAndWait(const T& work);
 
-        bool MenuItem(const char* label, Vector2u iconID, const char* shortcut = nullptr, bool selected = false, bool enabled = true) const;
-        bool BeginMenu(const char* label, Vector2u iconID, bool enabled = true) const;
+        bool MenuItem(const char* label, uint8_t iconID, const char* shortcut = nullptr, bool selected = false, bool enabled = true) const;
+        bool BeginMenu(const char* label, uint8_t iconID, bool enabled = true) const;
 
         void Start(const filesystem::path& filename, bool openWithGalaxy, const Clock& startUpTimer);
         void LoadFonts();
         void LoadShapes();
         void RecreateAppWindow();
+        void ApplyStyle();
         void CreateEmptyImage(Vector2u resolution, bool infiniteSize, Color color);
         void RescaleWindow(Vector2u size);
         void TitleBar();
@@ -107,6 +105,7 @@ namespace glxy
 
         void MenuNew();
         void MenuOpen();
+        void MenuOpenRecent();
         void MenuSave();
         void MenuSaveAs();
         void MenuExit(bool windowClose);
@@ -140,6 +139,7 @@ namespace glxy
         void MenuRotate90CCW();
         void MenuRotate180();
         void MenuTransformImage();
+        void MenuCircularShift();
         void MenuNewLayer();
         void MenuDeleteLayer();
         void MenuDuplicateLayer();
@@ -159,6 +159,9 @@ namespace glxy
         void MenuEffectDirectional();
         void MenuEffectWhite();
         void MenuEffectFractal();
+        void MenuEffectVignette();
+        void MenuEffectMandelbrot();
+        void MenuEffectSharpening();
         void MenuChangelog();
         void MenuFuturePlan();
         void MenuGLScan();

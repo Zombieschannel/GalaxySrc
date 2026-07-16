@@ -29,6 +29,21 @@ glxy::EffectFractalNoise::EffectFractalNoise(const int32_t octaves, const float 
 {
 }
 
+glxy::EffectVignette::EffectVignette(const float intensity, const float falloff)
+    : intensity(intensity), falloff(falloff)
+{
+}
+
+glxy::EffectMandelbrot::EffectMandelbrot(const int32_t iterations, const Vector2f offset, const float zoom)
+    : iterations(iterations), offset(offset), zoom(zoom)
+{
+}
+
+glxy::EffectSharpening::EffectSharpening(const float intensity, const int32_t radius, const float threshold)
+    : intensity(intensity), radius(radius), threshold(threshold)
+{
+}
+
 std::optional<Color32f> glxy::ImageEffects::getColor(const Vector2i pos, const array<const Image*, 9>& chunks)
 {
     const array chunkOffsets = {
@@ -119,15 +134,15 @@ Color32f glxy::ImageEffects::BoxBlur(const Vector2i offset, const array<const Im
     sum = cache.sum;
     count = cache.count;
 
-    const int16_t minLeftX = min(cache.pos.x - data.radius, offset.x - data.radius);
-    const int16_t minLeftY = min(cache.pos.y - data.radius, offset.y - data.radius);
-    const int16_t maxRightX = max(cache.pos.x + data.radius + 1, offset.x + data.radius + 1);
-    const int16_t maxRightY = max(cache.pos.y + data.radius + 1, offset.y + data.radius + 1);
+    const int16_t minLeftX = std::min(cache.pos.x - data.radius, offset.x - data.radius);
+    const int16_t minLeftY = std::min(cache.pos.y - data.radius, offset.y - data.radius);
+    const int16_t maxRightX = std::max(cache.pos.x + data.radius + 1, offset.x + data.radius + 1);
+    const int16_t maxRightY = std::max(cache.pos.y + data.radius + 1, offset.y + data.radius + 1);
 
-    const int16_t maxLeftX = max(cache.pos.x - data.radius, offset.x - data.radius);
-    const int16_t maxLeftY = max(cache.pos.y - data.radius, offset.y - data.radius);
-    const int16_t minRightX = min(cache.pos.x + data.radius + 1, offset.x + data.radius + 1);
-    const int16_t minRightY = min(cache.pos.y + data.radius + 1, offset.y + data.radius + 1);
+    const int16_t maxLeftX = std::max(cache.pos.x - data.radius, offset.x - data.radius);
+    const int16_t maxLeftY = std::max(cache.pos.y - data.radius, offset.y - data.radius);
+    const int16_t minRightX = std::min(cache.pos.x + data.radius + 1, offset.x + data.radius + 1);
+    const int16_t minRightY = std::min(cache.pos.y + data.radius + 1, offset.y + data.radius + 1);
 
     const Vector2i diff = offset - cache.pos;
     auto func = [&](const int16_t x, const int16_t y, const bool add)
@@ -221,7 +236,7 @@ Color32f glxy::ImageEffects::FractalNoise(const Vector2i offset, const array<con
     float sum = 0;
     for (int8_t k = 0; k < data.octaves; k++)
     {
-        const int32_t pitch = max(data.size.x, data.size.y) >> k;
+        const int32_t pitch = std::max(data.size.x, data.size.y) >> k;
         const int32_t sampleX1 = (offset.x / pitch) * pitch;
         const int32_t sampleY1 = (offset.y / pitch) * pitch;
 
@@ -237,6 +252,61 @@ Color32f glxy::ImageEffects::FractalNoise(const Vector2i offset, const array<con
     }
     const float result = noise / sum;
     return LerpColor(data.color1, data.color2, result);
+}
+
+Color32f glxy::ImageEffects::Vignette(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectVignette& data)
+{
+    const Vector2f normalized = Vector2f((offset.x + 0.5f) / data.size.x, (offset.y + 0.5f) / data.size.y);
+    const float dist = Distance::Point_Point(normalized, Vector2f(0.5f, 0.5f));
+    return Color32f(data.color.r, data.color.g, data.color.b, std::min(powf(dist, data.falloff) * data.intensity, 1.f));
+}
+
+Color32f glxy::ImageEffects::Mandelbrot(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectMandelbrot& data)
+{
+    const Vector2f off = Vector2f(-0.5f, 0) - data.offset + (Vector2f(-0.5f, -0.5f) +
+        Vector2f((offset.x + 0.5f) / data.size.x, (offset.y + 0.5f) / data.size.y)) * data.zoom;
+    Vector2f vec;
+    bool escaped = false;
+    int32_t it = 0;
+    for (it = 0; it < data.iterations; it++)
+    {
+        vec = Vector2f(vec.x * vec.x - vec.y * vec.y, 2 * vec.x * vec.y) + off;
+        if (vec.length() > 2)
+        {
+            escaped = true;
+            break;
+        }
+    }
+    return escaped ? LerpColor(data.color1, data.color2, static_cast<float>(it) / data.iterations) : data.color3;
+}
+
+Color32f glxy::ImageEffects::Sharpening(const Vector2i offset, const array<const Image*, 9>& chunks, const EffectSharpening& data)
+{
+    if (chunks.at(4) == nullptr)
+        return Color::Transparent;
+    const std::optional<Color32f> current = getColor(offset, chunks);
+    if (!current.has_value())
+        return Color::Transparent;
+
+    array<float, 3> sum = {};
+    float count = 0;
+    for (int16_t x = offset.x - data.radius; x <= offset.x + data.radius; x++)
+        for (int16_t y = offset.y - data.radius; y <= offset.y + data.radius; y++)
+        {
+            const std::optional<Color32f> color = getColor(Vector2i(x, y), chunks);
+            if (!color.has_value())
+                continue;
+            const float weight = static_cast<float>(data.values.at(x - (offset.x - data.radius))) * data.values.at(y - (offset.y - data.radius));
+            sum.at(0) += color->r * weight;
+            sum.at(1) += color->g * weight;
+            sum.at(2) += color->b * weight;
+            count += weight;
+        }
+    const Color32f blur = Color32f(sum.at(0) / count, sum.at(1) / count, sum.at(2) / count);
+    Color32f diff = Color32f(current->r - blur.r, current->g - blur.g, current->b - blur.b);
+    if (std::max({std::abs(diff.r), std::abs(diff.g), std::abs(diff.b)}) <= data.threshold)
+        diff = Color32f(0, 0, 0);
+    return Color32f(current->r + diff.r * data.intensity, current->g + diff.g * data.intensity, current->b + diff.b * data.intensity, current->a);
 }
 
 void glxy::ImageEffects::Effect(const array<ImageChunk*, 9>& chunks, const Vector2u chunkOffset, const LayerID layerID, const IntRect& area, const Effects effect, const EffectData* data)
@@ -272,8 +342,13 @@ void glxy::ImageEffects::Effect(const array<ImageChunk*, 9>& chunks, const Vecto
             case Effects::DirectionalBlur: outColor = DirectionalBlur(targetPixel, arr, reinterpret_cast<const EffectDirectionalBlur&>(*data)); break;
             case Effects::WhiteNoise: outColor = WhiteNoise(targetPixel, arr, reinterpret_cast<const EffectWhiteNoise&>(*data)); break;
             case Effects::FractalNoise: outColor = FractalNoise(Vector2i(x + chunkOffset.x, y + chunkOffset.y), arr, reinterpret_cast<const EffectFractalNoise&>(*data)); break;
+            case Effects::Vignette: outColor = Vignette(Vector2i(x + chunkOffset.x, y + chunkOffset.y), arr, reinterpret_cast<const EffectVignette&>(*data)); break;
+            case Effects::Mandelbrot: outColor = Mandelbrot(Vector2i(x + chunkOffset.x, y + chunkOffset.y), arr, reinterpret_cast<const EffectMandelbrot&>(*data)); break;
+            case Effects::Sharpening: outColor = Sharpening(targetPixel, arr, reinterpret_cast<const EffectSharpening&>(*data)); break;
             default: outColor = Color::Black; break;
             }
+            outColor = Color32f(std::clamp(outColor.r, 0.f, 1.f), std::clamp(outColor.g, 0.f, 1.f),
+                std::clamp(outColor.b, 0.f, 1.f), std::clamp(outColor.a, 0.f, 1.f));
             chunks.at(4)->setPixelColorTemp(Vector2u(targetPixel), outColor);
         }
 }

@@ -41,7 +41,7 @@ Color32f glxy::ImageAdjustments::HSV(const Color32f color, const AdjustHSV& data
     if (hsv.h != 0.f || hsv.s != 0.f)
         hsv.s += data.saturation;
     hsv.v += data.value;
-    hsv.h = fmodf(hsv.h, 360.f);
+    hsv.h = std::fmod(hsv.h, 360.f);
     if (hsv.h < 0.f)
         hsv.h += 360.f;
     hsv.h = std::clamp(hsv.h, 0.f, 360.f);

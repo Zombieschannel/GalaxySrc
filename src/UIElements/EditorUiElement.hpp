@@ -50,7 +50,7 @@ public:
     bool hasChanged() const;
     Transform getCalculatedTransform(const RenderTarget& target) const;
     void setSelectColor(Color selectColor);
-    void Update(const RenderTarget& target, Vector2f mousePos, Vector2f mousePosUI);
+    bool Update(const RenderTarget& target, Vector2f mousePos, Vector2f mousePosUI);
 
 protected:
     void draw(RenderTarget& target, RenderStates states) const override;

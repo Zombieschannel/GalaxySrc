@@ -9,7 +9,7 @@ namespace glxy
 {
     class ImageChunk
     {
-        std::vector<Image> colorLayer;
+        std::vector<unique_ptr<Image>> colorLayer;
         unique_ptr<Image> colorTempLayer;
         unique_ptr<Image> selectionLayer;
         unique_ptr<Image> selectionTempLayer;
@@ -23,6 +23,8 @@ namespace glxy
         const Vector2u chunkSize;
         const Vector2i chunkPosition;
 
+        mutable uint32_t lastUpdatedFrame = 0;
+
     public:
         unique_ptr<std::mutex> mtxImageChunks;
 
@@ -32,6 +34,9 @@ namespace glxy
         Color getPixelColorTemp(Vector2u coord) const;
         bool getPixelSelection(Vector2u coord) const;
         bool getPixelSelectionTemp(Vector2u coord) const;
+
+        uint32_t getLastUpdated() const;
+        void setLastUpdated(uint32_t time) const;
 
         bool hasSelectionLayer() const;
         bool hasSelectionTempLayer() const;
@@ -51,7 +56,8 @@ namespace glxy
         Vector2u getSize() const;
         Vector2i getChunkPosition() const;
 
-        void addLayer(LayerID layerID, Color color = Color::Transparent);
+        void addLayer(LayerID layerID);
+        void clearLayer(LayerID layerID, Color color = Color::Transparent);
         void duplicateLayer(LayerID layerID);
         void deleteLayer(LayerID layerID);
         void moveLayerUp(LayerID layerID);
@@ -88,6 +94,7 @@ namespace glxy
         void CopyImageInternal(ImageLayerType src, ImageLayerType dst, const IntRect& area, LayerID layerSrc = 0, LayerID layerDst = 0);
 
         void InvalidateColorTextures() const;
+        void InvalidateSelectionTextures() const;
         void MergeColorTempLayer(LayerID layerID, BlendMode blendMode);
 
         void setUpdatedColorNative() const;

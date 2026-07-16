@@ -1,6 +1,6 @@
 #pragma once
 #include <SFML/Graphics.hpp>
-#include "../AppSettings.hpp"
+#include "../Config.hpp"
 #include "../Pickers/ColorPicker.hpp"
 #include "../Pickers/LayerPicker.hpp"
 #include "../Pickers/ToolPicker.hpp"
@@ -17,18 +17,27 @@ namespace glxy
 {
     class ImageEditorWorker : public ImageEditorWorkerCommon
     {
+        struct TransformImageCache
+        {
+            vector<pair<IntRect, Texture>> colorBufferChunks;
+            vector<pair<IntRect, Texture>> selectionBufferChunks;
+            unique_ptr<Image> colorBufferTemp;
+            unique_ptr<Image> selectionBufferTemp;
+            bool requiresUpdateColor = false;
+            bool requiresUpdateSelection = false;
+        };
     public:
         ChunkManager chunkManager;
 
         LayerID workingLayer = -1;
         Vector2f pixelSelectStart;
 
-        unique_ptr<Image> colorBufferTemp;
-        unique_ptr<Image> selectionBufferTemp;
-
         bool transformImage = false;
         IntRect transformImageSelectionArea;
         unique_ptr<Transformable> transformImageTransform;
+
+        IntRect prevTextRenderArea;
+        TransformImageCache transformImageCache;
 
         ImageEditorWorker(bool infinite);
         void Empty(Vector2u resolution, Color color);
@@ -58,16 +67,18 @@ namespace glxy
         void OptionCancel();
         void OptionFinish();
         void OptionSetupTransformImage(LayerID layerID);
-        void OptionTransformImage(Vector2f pos, float rot, Vector2f scale, Vector2f origin, bool tile);
+        void OptionTransformImage(Vector2f pos, float rot, Vector2f scale, Vector2f origin, int16_t repeat, bool smooth);
+        void OptionSetupCircularShift();
+        void OptionCircularShift(int32_t shift, bool horizontal, int32_t groupSize);
         void OptionCropSelection();
 
         Vector2u getSize() const;
 
         void BeginSelect(Vector2f pos, SelectMode selectMode, ShapeSelectType type, bool keepAspect);
-        void EndSelect(Vector2f pos, ShapeSelectType type);
+        void EndSelect(Vector2f pos);
 
         void SetupMovePixels();
-        void MovePixels(const Transform& transform);
+        void MovePixels(const Transform& transform, bool smooth);
         void CancelMovePixels(const IntRect& area);
         void FinishMovePixels(const IntRect& area);
 
@@ -76,17 +87,18 @@ namespace glxy
         void CancelMoveSelection(const IntRect& area);
         void FinishMoveSelection(const IntRect& area);
 
-        IntRect TransformImage(const Transform& transform, bool tile, bool selectionOnly);
+        IntRect TransformImage(const Transform& transform, int16_t repeat, bool smooth, bool selectionOnly);
 
         void SetupMaskedRendering(RenderTexture& renderTexture, ChunkID chunkID) const;
         static void InterpolatePixelLine(Vector2f start, Vector2f end, vector<Vector2i>& out);
-        void PencilPixels(Vector2f pos, Vector2f prev, Color color, LayerID layerID);
-        void BrushPixels(Vector2f start, Vector2f end, float radius, Color color, LayerID layerID, bool eraser);
+        void ChunksInBrushLine(Vector2f start, Vector2f end, float radius, vector<ChunkID>& out) const;
+        void PencilPixels(Vector2f pos, Vector2f prev, Color color);
+        void BrushPixels(Vector2f start, Vector2f end, float radius, Color color, bool eraser);
         void ColorSwapPixels(Vector2f start, Vector2f end, float radius, Color color1, Color color2, int8_t tol, LayerID layerID);
         bool FillPixels(Vector2i pos, Color color, int8_t tolerance, LayerID layerID);
         void GradientPixels(Vector2f startPos, Vector2f endPos, Color startColor, Color endColor);
-        void ShapePixels(const shared_ptr<ConvexShape>& shape, LayerID layerID);
-        void TextPixels(const shared_ptr<Text>& text, const FloatRect& globalBounds, LayerID layerID);
+        void ShapePixels(const shared_ptr<ConvexShape>& shape);
+        void TextPixels(const shared_ptr<Text>& text, const FloatRect& globalBounds);
 
         void ResizeCanvas(Vector2u size, Pivot pivot);
         void RescaleCanvas(Vector2u newSize, RescaleMethod method);

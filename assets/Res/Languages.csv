@@ -19,6 +19,9 @@ PopUpTitle[17],Effect,
 PopUpTitle[18],,
 PopUpTitle[19],Grid bold,
 PopUpTitle[20],Search,
+PopUpTitle[21],Recent,
+PopUpTitle[22],Circular shift,
+PopUpTitle[23],Save extra,
 otherMenu[0],Changelog,Änderungsprotokoll
 otherMenu[1],</> Future plans,</> Zukunftspläne
 otherMenu[2],OpenGL info,OpenGL Info
@@ -26,9 +29,10 @@ otherMenu[3],Debug mode,
 otherMenu[4],About,Über
 fileMenu[0],New image,Neues Bild
 fileMenu[1],Open image,Bild öffnen
-fileMenu[2],Save image,Bild speichern
-fileMenu[3],Save image as,Bild speichern als
-fileMenu[4],Exit,Verlassen
+fileMenu[2],Recent image,
+fileMenu[3],Save image,Bild speichern
+fileMenu[4],Save image as,Bild speichern als
+fileMenu[5],Exit,Verlassen
 ThemeType[0],Turquoise leaf,Türkis
 ThemeType[1],Laser red,Laserrot
 ThemeType[2],Midnight,Mitternacht
@@ -56,7 +60,8 @@ shortcut[19],Crop,
 shortcut[20],Search,
 setupOption[0],New image,Neues Bild
 setupOption[1],Open,Öffnen
-setupOption[2],Settings,Einstellungen
+setupOption[2],Recent,
+setupOption[3],Settings,Einstellungen
 editMenu[0],Copy,Kopieren
 editMenu[1],Cut,Ausschneiden
 editMenu[2],Paste,Einfügen
@@ -90,6 +95,7 @@ imageMenu[5],Rotate 90° CW,90° im Uhrzeigersinn drehen
 imageMenu[6],Rotate 90° CCW,90° gegen den Uhrzeigersinn drehen
 imageMenu[7],Rotate 180°,180° drehen
 imageMenu[8],Transform image,Bild transformieren
+imageMenu[9],Circular shift,
 layerMenu[0],Add new layer,Neue Ebene hinzufügen
 layerMenu[1],Delete layer,Ebene löschen
 layerMenu[2],Duplicate layer,Ebene duplizieren
@@ -109,6 +115,9 @@ effectMenu[1],Box blur,
 effectMenu[2],Directional blur,
 effectMenu[3],Add white noise,
 effectMenu[4],Add fractal noise,
+effectMenu[5],Vignette,
+effectMenu[6],Mandelbrot set,
+effectMenu[7],Sharpening,
 toolName[0],Box select,Rechteckige Auswahl
 toolName[1],Circle select,Kreis Auswahl
 toolName[2],Lasso select,
@@ -146,9 +155,6 @@ layerToolTip[3],Move layer up,Ebene nach oben verschieben
 layerToolTip[4],Move layer down,Ebene nach unten verschieben
 layerToolTip[5],Merge layer down,Mit der darunterliegenden Ebene zusammenführen
 layerToolTip[6],Layer properties,Ebeneneigenschaften
-panMouseButton[0],Middle button,
-panMouseButton[1],Extra button 1,
-panMouseButton[2],Extra button 2,
 shapeName[0],Rectangle,
 shapeName[1],Rounded rect,
 shapeName[2],Circle,
@@ -168,6 +174,35 @@ shapeName[15],Club,
 windowName[0],Tool picker,
 windowName[1],Color picker,
 windowName[2],Layers,
+Sampling method,Sampling method,
+Nearest,Nearest,
+Linear,Linear,
+Repeat,Repeat,
+Viewport antialiasing,Viewport antialiasing,
+Threshold,Threshold,
+Falloff factor,Falloff factor,
+Center color,Center color,
+Outer color,Outer color,
+Offset,Offset,
+Zoom,Zoom,
+Iterations,Iterations,
+None,None,
+Extra2 mouse button,Extra2 mouse button,
+Extra1 mouse button,Extra1 mouse button,
+Middle mouse button,Middle mouse button,
+Create,Create,
+Thumbnail cache size limit,Thumbnail cache size limit,
+Swap,Swap,
+Total pixels,Total pixels,
+Shift,Shift,
+Group size,Group size,
+Horizontal,Horizontal,
+Vertical,Vertical,
+Files,Files,
+Folders,Folders,
+All compatible types,All compatible types,
+All file types,All file types,
+Filter,Filter,
 Text,Text,
 Copy to clipboard,Copy to clipboard,
 Shape,Shape,
@@ -296,10 +331,12 @@ Filename,Filename,Dateiname
 Extension,Extension,Dateiendung
 glxyWarning1,Image with the same name already exists!,Ein Bild mit dem gleichen Namen existiert bereits!
 glxyWarning2,Image has unsaved changes!,
+glxyWarning3,Image size is not divisible by group size!,
 glxyTooltip1,Makes the refresh rate of the editor match your monitor refresh rate. Ex. 60Hz/144Hz.. Also should remove screen tearing.,Stellt die Bildwiederholfrequenz des Editors auf die Ihres Monitors ein. Zum Beispiel 60 Hz / 144 Hz... Sollte auch Bildschirm-Tearing verhindern.
 glxyTooltip2,"Change if you want more or less than 60 frames per second. Min is 5, max is 1000.","Ändern Sie dies, wenn Sie mehr oder weniger als 60 Bilder pro Sekunde wünschen. Der Mindestwert ist 5, der Maximalwert ist 1000."
 glxyTooltip3,Used to smooth out sharp edges in viewport. Quite resource heavy.,"Wird verwendet, um scharfe Kanten im Viewport zu glätten. Ist ziemlich ressourcenintensiv."
 glxyTooltip4,Updates the editor only when the window is active. Makes the editor less resource heavy when running in the background.,"Aktualisiert den Editor nur, wenn das Fenster aktiv ist. Macht den Editor ressourcenschonender, wenn er im Hintergrund läuft."
+glxyTooltip5,"When caching thumbnails, how large can the image file size be before it is skipped and replaced with a generic file thumbnail.",
 glxyAbout1,"Galaxy is an image editor made in C++ using SFML, ImGui, stb_image.",
 glxyAbout2,Inspired by Paint.NET and Pinta.,Inspiriert von Paint.NET und Pinta.
 glxyAbout3,Translators:,Übersetzer:

@@ -11,7 +11,9 @@ glxy::ImageChunk::ImageChunk(const Vector2u chunkSize, const Vector2i chunkPosit
 
 Color glxy::ImageChunk::getPixelColor(const LayerID layerID, const Vector2u coord) const
 {
-    return colorLayer.at(layerID).getPixel(coord);
+    if (!colorLayer.at(layerID))
+        return Color::Transparent;
+    return colorLayer.at(layerID)->getPixel(coord);
 }
 
 Color glxy::ImageChunk::getPixelColorTemp(const Vector2u coord) const
@@ -27,6 +29,16 @@ bool glxy::ImageChunk::getPixelSelection(const Vector2u coord) const
 bool glxy::ImageChunk::getPixelSelectionTemp(const Vector2u coord) const
 {
     return selectionTempLayer->getPixel(coord).a > 128;
+}
+
+uint32_t glxy::ImageChunk::getLastUpdated() const
+{
+    return lastUpdatedFrame;
+}
+
+void glxy::ImageChunk::setLastUpdated(const uint32_t time) const
+{
+    lastUpdatedFrame = time;
 }
 
 bool glxy::ImageChunk::hasSelectionLayer() const
@@ -71,7 +83,7 @@ bool glxy::ImageChunk::needsUpdateSelectionTemp() const
 
 const Image* glxy::ImageChunk::getImageColor(const LayerID layerID) const
 {
-    return &colorLayer.at(layerID);
+    return colorLayer.at(layerID).get();
 }
 
 const Image* glxy::ImageChunk::getImageColorTemp() const
@@ -99,18 +111,30 @@ Vector2i glxy::ImageChunk::getChunkPosition() const
     return chunkPosition;
 }
 
-void glxy::ImageChunk::addLayer(const LayerID layerID, const Color color)
+void glxy::ImageChunk::addLayer(const LayerID layerID)
 {
-    colorLayer.insert(colorLayer.begin() + layerID, Image(getSize(), color));
+    colorLayer.insert(colorLayer.begin() + layerID, nullptr);
+}
+
+void glxy::ImageChunk::clearLayer(const LayerID layerID, const Color color)
+{
+    if (!colorLayer.at(layerID))
+        colorLayer.at(layerID) = make_unique<Image>(getSize(), color);
+    else
+        colorLayer.at(layerID)->resize(getSize(), color);
 }
 
 void glxy::ImageChunk::duplicateLayer(const LayerID layerID)
 {
-    colorLayer.insert(colorLayer.begin() + layerID + 1, Image(getSize(), Color::Transparent));
-    validate(colorLayer.at(layerID + 1).copy(colorLayer.at(layerID), Vector2u()));
-    needUpdateColorLow = true;
-    needUpdateColorMedium = true;
-    needUpdateColorNative = true;
+    colorLayer.insert(colorLayer.begin() + layerID + 1, nullptr);
+    if (colorLayer.at(layerID))
+    {
+        colorLayer.at(layerID + 1) = make_unique<Image>(getSize(), Color::Transparent);
+        validate(colorLayer.at(layerID + 1)->copy(*colorLayer.at(layerID), Vector2u()));
+        needUpdateColorLow = true;
+        needUpdateColorMedium = true;
+        needUpdateColorNative = true;
+    }
 }
 
 void glxy::ImageChunk::deleteLayer(const LayerID layerID)
@@ -140,20 +164,25 @@ void glxy::ImageChunk::moveLayerDown(const LayerID layerID)
 void glxy::ImageChunk::mergeLayerDown(const LayerID lowerLayerID, const LayerID upperLayerID, const uint8_t blendModeLower,
     const uint8_t blendModeUpper, const uint8_t transparency)
 {
+    if (!colorLayer.at(upperLayerID))
+        return;
+
     RenderTexture renderTexture;
     validate(renderTexture.resize(chunkSize, {0U, 0U, 0U}));
 
     renderTexture.clear(Color::Transparent);
     renderTexture.setView(View(FloatRect({0.f, 0.f}, Vector2f(chunkSize))));
 
-    RenderLayerToTexture(colorLayer.at(lowerLayerID), chunkSize, 255, c_blendModes.at(blendModeLower), renderTexture);
-    RenderLayerToTexture(colorLayer.at(upperLayerID), chunkSize, transparency, c_blendModes.at(blendModeUpper), renderTexture);
+    RenderLayerToTexture(colorLayer.at(lowerLayerID).get(), chunkSize, 255, c_blendModes.at(blendModeLower), renderTexture);
+    RenderLayerToTexture(colorLayer.at(upperLayerID).get(), chunkSize, transparency, c_blendModes.at(blendModeUpper), renderTexture);
 
     renderTexture.display();
 
     const Image image = renderTexture.getTexture().copyToImage();
 
-    validate(colorLayer.at(lowerLayerID).copy(image, Vector2u()));
+    if (!colorLayer.at(lowerLayerID))
+        colorLayer.at(lowerLayerID) = make_unique<Image>(getSize(), Color::Transparent);
+    validate(colorLayer.at(lowerLayerID)->copy(image, Vector2u()));
 
     colorLayer.erase(colorLayer.begin() + upperLayerID);
     needUpdateColorLow = true;
@@ -230,7 +259,9 @@ void glxy::ImageChunk::deleteSelectionTempLayer()
 
 void glxy::ImageChunk::setPixelColor(const LayerID layerID, const Vector2u coord, const Color color)
 {
-    colorLayer.at(layerID).setPixel(coord, color);
+    if (!colorLayer.at(layerID))
+        colorLayer.at(layerID) = make_unique<Image>(getSize(), Color::Transparent);
+    colorLayer.at(layerID)->setPixel(coord, color);
     needUpdateColorLow = true;
     needUpdateColorMedium = true;
     needUpdateColorNative = true;
@@ -258,7 +289,14 @@ void glxy::ImageChunk::setPixelSelectionTemp(const Vector2u coord, const bool se
 
 void glxy::ImageChunk::CopyColorImage(const LayerID layerID, Image& target, const Vector2u dest, const IntRect& area) const
 {
-    validate(target.copy(colorLayer.at(layerID), dest, area));
+    if (!colorLayer.at(layerID))
+    {
+        for (int32_t x = area.position.x; x < area.position.x + area.size.x; x++)
+            for (int32_t y = area.position.y; y < area.position.y + area.size.y; y++)
+                target.setPixel(dest + Vector2u(x, y), Color::Transparent);
+        return;
+    }
+    validate(target.copy(*colorLayer.at(layerID), dest, area));
 }
 
 void glxy::ImageChunk::CopySelectionImage(Image& target, const Vector2u dest, const IntRect& area) const
@@ -278,7 +316,9 @@ void glxy::ImageChunk::CopySelectionImageTemp(Image& target, const Vector2u dest
 
 void glxy::ImageChunk::PasteColorImage(const LayerID layerID, const Image& src, const Vector2u dest, const IntRect& area)
 {
-    validate(colorLayer.at(layerID).copy(src, dest, area));
+    if (!colorLayer.at(layerID))
+        colorLayer.at(layerID) = make_unique<Image>(getSize(), Color::Transparent);
+    validate(colorLayer.at(layerID)->copy(src, dest, area));
     needUpdateColorLow = true;
     needUpdateColorMedium = true;
     needUpdateColorNative = true;
@@ -319,7 +359,7 @@ void glxy::ImageChunk::CopyImageInternal(const ImageLayerType src, const ImageLa
     }
     switch (dst)
     {
-    case ImageLayerType::Color: dstLayer = &colorLayer.at(layerDst); break;
+    case ImageLayerType::Color: dstLayer = colorLayer.at(layerDst).get(); break;
     case ImageLayerType::Selection: dstLayer = selectionLayer.get(); break;
     case ImageLayerType::ColorTemp: dstLayer = colorTempLayer.get(); break;
     case ImageLayerType::SelectionTemp: dstLayer = selectionTempLayer.get(); break;
@@ -336,6 +376,12 @@ void glxy::ImageChunk::InvalidateColorTextures() const
     needUpdateColorNative = true;
 }
 
+void glxy::ImageChunk::InvalidateSelectionTextures() const
+{
+    needUpdateSelection = true;
+    needUpdateSelectionTemp = true;
+}
+
 void glxy::ImageChunk::MergeColorTempLayer(const LayerID layerID, const BlendMode blendMode)
 {
     RenderTexture renderTexture;
@@ -345,15 +391,17 @@ void glxy::ImageChunk::MergeColorTempLayer(const LayerID layerID, const BlendMod
     renderTexture.clear(Color::Transparent);
     renderTexture.setView(View(FloatRect({0.f, 0.f}, Vector2f(chunkSize))));
 
-    RenderLayerToTexture(colorLayer.at(layerID), chunkSize, 255, BlendNone, renderTexture);
-    RenderLayerToTexture(*colorTempLayer, chunkSize, 255, blendMode, renderTexture);
+    RenderLayerToTexture(colorLayer.at(layerID).get(), chunkSize, 255, BlendNone, renderTexture);
+    RenderLayerToTexture(colorTempLayer.get(), chunkSize, 255, blendMode, renderTexture);
 
     renderTexture.display();
 
     const Image image = renderTexture.getTexture().copyToImage();
 
     lock_guard lock(*mtxImageChunks);
-    validate(colorLayer.at(layerID).copy(image, Vector2u()));
+    if (!colorLayer.at(layerID))
+        colorLayer.at(layerID) = make_unique<Image>(getSize(), Color::Transparent);
+    validate(colorLayer.at(layerID)->copy(image, Vector2u()));
 }
 
 void glxy::ImageChunk::setUpdatedColorNative() const

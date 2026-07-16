@@ -38,7 +38,7 @@ void GridLines::Update(const View& view, const Vector2u imageSize, const bool in
     {
         vertexArray.clear();
         manualChange = false;
-        for (int32_t i = max(left, range.position.x); i <= min(right, range.position.x + range.size.x); i++)
+        for (int32_t i = std::max(left, range.position.x); i <= std::min(right, range.position.x + range.size.x); i++)
         {
             if (boldSize.x > 0 && i % boldSize.x == 0)
             {
@@ -58,7 +58,7 @@ void GridLines::Update(const View& view, const Vector2u imageSize, const bool in
             }
         }
 
-        for (int32_t i = max(top, range.position.y); i <= min(bottom, range.position.y + range.size.y); i++)
+        for (int32_t i = std::max(top, range.position.y); i <= std::min(bottom, range.position.y + range.size.y); i++)
         {
             if (boldSize.y > 0 && i % boldSize.y == 0)
             {

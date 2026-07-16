@@ -69,7 +69,7 @@ Image glxy::ChunkTextureManager::renderWholeImage(const ChunkManager& chunkManag
     {
         ImageChunkTexture texture(chunkManager, Vector2i(i % chunkManager.getChunkCount().x, i / chunkManager.getChunkCount().x));
         const Texture t = texture.RenderChunk(1, false,
-            c_blendModes.at(chunkManager.getTempLayerBlendMode()), -1);
+            c_blendModes.at(chunkManager.getTempLayerBlendMode()), -1, false);
         validate(stack.copy(t.copyToImage(),
             Vector2u(chunkManager.getChunkSize() * (i % chunkManager.getChunkCount().x),
                 chunkManager.getChunkSize() * (i / chunkManager.getChunkCount().x)), IntRect()));
@@ -114,24 +114,24 @@ void glxy::ChunkTextureManager::Update()
     }
 }
 
-void glxy::ChunkTextureManager::RenderLQChunk(const ChunkID chunkID, const bool overrideWithTempLayer, const LayerID layerID)
+void glxy::ChunkTextureManager::RenderLQChunk(const ChunkID chunkID, const bool overwriteWithTempLayer, const LayerID layerID, const bool skipLayer)
 {
-    textureChunks.at(chunkID).RenderLowQuality(overrideWithTempLayer,
-        c_blendModes.at(chunkManager.getTempLayerBlendMode()), layerID);
+    textureChunks.at(chunkID).RenderLowQuality(overwriteWithTempLayer,
+        c_blendModes.at(chunkManager.getTempLayerBlendMode()), layerID, skipLayer);
     chunkManager.setUpdatedColorLow(chunkID);
 }
 
-void glxy::ChunkTextureManager::RenderMQChunk(const ChunkID chunkID, const bool overrideWithTempLayer, const LayerID layerID)
+void glxy::ChunkTextureManager::RenderMQChunk(const ChunkID chunkID, const bool overwriteWithTempLayer, const LayerID layerID, const bool skipLayer)
 {
-    textureChunks.at(chunkID).RenderMediumQuality(overrideWithTempLayer,
-    c_blendModes.at(chunkManager.getTempLayerBlendMode()), layerID);
+    textureChunks.at(chunkID).RenderMediumQuality(overwriteWithTempLayer,
+    c_blendModes.at(chunkManager.getTempLayerBlendMode()), layerID, skipLayer);
     chunkManager.setUpdatedColorMedium(chunkID);
 }
 
-void glxy::ChunkTextureManager::RenderNQChunk(const ChunkID chunkID, const bool overrideWithTempLayer, const LayerID layerID)
+void glxy::ChunkTextureManager::RenderNQChunk(const ChunkID chunkID, const bool overwriteWithTempLayer, const LayerID layerID, const bool skipLayer)
 {
-    textureChunks.at(chunkID).RenderNativeQuality(overrideWithTempLayer,
-        c_blendModes.at(chunkManager.getTempLayerBlendMode()), layerID);
+    textureChunks.at(chunkID).RenderNativeQuality(overwriteWithTempLayer,
+        c_blendModes.at(chunkManager.getTempLayerBlendMode()), layerID, skipLayer);
     chunkManager.setUpdatedColorNative(chunkID);
 }
 
@@ -211,7 +211,7 @@ void glxy::ChunkTextureManager::draw(RenderTarget& target, RenderStates states) 
             target.draw(arr.data(), 4, PrimitiveType::TriangleFan, RenderStates(
                 BlendAlpha, StencilMode(), Transform::Identity, CoordinateType::Normalized, getChunkNativeTexture(chunkID), nullptr));
         }
-        else if (drawQuality == 1 && getChunkMediumTexture(chunkID))
+        else if (drawQuality <= 1 && getChunkMediumTexture(chunkID))
         {
             target.draw(arr.data(), 4, PrimitiveType::TriangleFan, RenderStates(
                 BlendAlpha, StencilMode(), Transform::Identity, CoordinateType::Normalized, getChunkMediumTexture(chunkID), nullptr));

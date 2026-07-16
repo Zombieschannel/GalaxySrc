@@ -32,7 +32,7 @@ elseif(LINUX)
 
     set(SFML_DIR "${SFML_LOC}/lib64/cmake/SFML")
     find_package(SFML 3.1 COMPONENTS System Window Graphics REQUIRED)
-    add_executable (${PROJECT_NAME} ${Project_SOURCES} ${Imgui_SOURCES} ${Whereami_SOURCES})
+    add_executable (${PROJECT_NAME} ${Project_SOURCES} ${Imgui_SOURCES} ${Whereami_SOURCES} "assets.S")
 
     target_include_directories(${PROJECT_NAME} PRIVATE ../imgui ../stb_image)
 
@@ -44,7 +44,7 @@ elseif(MACOS)
     set(ICON_NAME "AppLogo.icns")
     set(ICON_PATH "${CMAKE_SOURCE_DIR}/src/${ICON_NAME}")
 
-    add_executable (${PROJECT_NAME} MACOSX_BUNDLE ${Project_SOURCES} ${Imgui_SOURCES} ${ICON_PATH} ${Whereami_SOURCES})
+    add_executable (${PROJECT_NAME} MACOSX_BUNDLE ${Project_SOURCES} ${Imgui_SOURCES} ${ICON_PATH} ${Whereami_SOURCES} "assetsMacOS.S")
 
     set_source_files_properties( ${ICON_PATH} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 
@@ -96,8 +96,8 @@ elseif(ANDROID)
     set_target_properties(GLES::GLES PROPERTIES
             INTERFACE_LINK_LIBRARIES GLESv1_CM)
 
-    find_package(SFML 3.1 COMPONENTS System Window Graphics Main)
-    add_library(${PROJECT_NAME} SHARED ${Project_SOURCES} ${Imgui_SOURCES} ${Whereami_SOURCES})
+    find_package(SFML 3.1 COMPONENTS System Window Graphics Main REQUIRED)
+    add_library(${PROJECT_NAME} SHARED ${Project_SOURCES} ${Imgui_SOURCES} ${Whereami_SOURCES} "assets.S")
     target_include_directories(${PROJECT_NAME} PRIVATE ../imgui ../stb_image)
 
 elseif(EMSCRIPTEN)
@@ -166,7 +166,7 @@ elseif(EMSCRIPTEN)
     set(FLAC_DIR ${SFML_ROOT}/lib/cmake/FLAC)
     set(SFML_DIR ${SFML_ROOT}/lib/cmake/SFML)
 
-    find_package(SFML 3.1 COMPONENTS Graphics Window System Audio Network REQUIRED)
+    find_package(SFML 3.1 COMPONENTS Graphics Window System REQUIRED)
     add_executable (${PROJECT_NAME} ${Project_SOURCES} ${Imgui_SOURCES})
 
     target_include_directories(${PROJECT_NAME} PRIVATE ../imgui ../stb_image)
@@ -177,6 +177,10 @@ endif()
 
 if (ANDROID OR EMSCRIPTEN)
     target_compile_definitions(${PROJECT_NAME} PRIVATE SFML_OPENGL_ES)
+endif()
+
+if (MACOS)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE GL_SILENCE_DEPRECATION)
 endif()
 
 if (ANDROID)

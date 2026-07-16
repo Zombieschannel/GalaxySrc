@@ -40,6 +40,11 @@ IntRect glxy::ImageEditorWorkerCommon::getNewMoveSelectArea() const
     return newMoveSelectArea;
 }
 
+bool glxy::ImageEditorWorkerCommon::getCircularShift() const
+{
+    return circularShift;
+}
+
 bool glxy::ImageEditorWorkerCommon::getMoveSelection() const
 {
     return moveSelection;
@@ -47,5 +52,5 @@ bool glxy::ImageEditorWorkerCommon::getMoveSelection() const
 
 bool glxy::ImageEditorWorkerCommon::hasUnfinishedChanges() const
 {
-    return bucketFill || wandFill || gradientDraw || moveSelected || shapeDraw || textDraw;
+    return bucketFill || wandFill || gradientDraw || moveSelected || moveSelection || shapeDraw || textDraw;
 }

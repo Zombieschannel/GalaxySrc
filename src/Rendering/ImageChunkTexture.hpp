@@ -35,10 +35,10 @@ namespace glxy
         void deleteSelection();
         void deleteSelectionTemp();
 
-        Texture RenderChunk(uint32_t resolution, bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, LayerID layerID) const;
-        void RenderLowQuality(bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, LayerID layerID);
-        void RenderMediumQuality(bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, LayerID layerID);
-        void RenderNativeQuality(bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, LayerID layerID);
+        Texture RenderChunk(uint32_t resolution, bool overwriteWithTempLayer, const BlendMode& tempLayerBlendMode, LayerID layerID, bool skipLayer) const;
+        void RenderLowQuality(bool overwriteWithTempLayer, const BlendMode& tempLayerBlendMode, LayerID layerID, bool skipLayer);
+        void RenderMediumQuality(bool overwriteWithTempLayer, const BlendMode& tempLayerBlendMode, LayerID layerID, bool skipLayer);
+        void RenderNativeQuality(bool overwriteWithTempLayer, const BlendMode& tempLayerBlendMode, LayerID layerID, bool skipLayer);
         void MakeSelectionTexture();
         void MakeSelectionTempTexture();
     };

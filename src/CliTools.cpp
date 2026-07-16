@@ -4,7 +4,6 @@
 #include "Canvas/CanvasWorker.hpp"
 #include "Rendering/ChunkTextureManager.hpp"
 #include "ZEditorsCommon/InternalResource.hpp"
-#include "ZEditorsCommon/Languages.hpp"
 
 using namespace sf;
 
@@ -69,7 +68,7 @@ void glxy::CLITools::Help()
     for (int8_t i = 0; i < rescaleMethods.size(); i++)
     {
         const RescaleMethod method = static_cast<RescaleMethod>(i);
-        cout << rescaleMethods.at(method) << tab.substr(rescaleMethods.at(method).size()) << LL::ind("resamplingMethod[]", i)<< endl;
+        cout << rescaleMethods.at(method) << tab.substr(rescaleMethods.at(method).size()) << rescaleMethods.at(method) << endl;
     }
 
     for (int8_t i = 0; i < 70; i++)
@@ -93,6 +92,8 @@ int32_t glxy::CLITools::ActionHandler(const CLIAction action, const vector<strin
         case CLIAction::Rotate90CW: case CLIAction::Rotate90CCW: case CLIAction::Rotate180: case CLIAction::ImageHorizontal:
         case CLIAction::ImageVertical:
             return 0;
+        default:
+            break;
         }
     }
 
@@ -242,13 +243,13 @@ int32_t glxy::CLITools::ActionHandler(const CLIAction action, const vector<strin
     case CLIAction::Rotate180: CanvasWorker::AddWork(CanvasWork::Rotate180{}, activeEditor); break;
     case CLIAction::ImageHorizontal: CanvasWorker::AddWork(CanvasWork::FlipImageHorizontal{}, activeEditor); break;
     case CLIAction::ImageVertical: CanvasWorker::AddWork(CanvasWork::FlipImageVertical{}, activeEditor); break;
+    default: break;
     }
     return 0;
 }
 
 int32_t glxy::CLITools::Start(const vector<string>& arguments)
 {
-    LL::load(InternalResource::getResource(ID_RES2, "BINARY"));
     Clock counter;
     vector<CLIAction> actions;
     int32_t actionResult = 0;

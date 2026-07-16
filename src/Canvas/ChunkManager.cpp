@@ -3,12 +3,6 @@
 #include <cmath>
 #include "../Func.hpp"
 
-
-int32_t glxy::ChunkManager::modneg(const int32_t a, const int32_t b)
-{
-    return (a % b + b) % b;
-}
-
 glxy::ChunkManager::ChunkManager(const bool infinite)
     : chunkSize(0), shapeSelectType(ShapeSelectType::Box), imageChunks(infinite)
 {
@@ -22,10 +16,10 @@ void glxy::ChunkManager::ForEachChunkID(const std::function<void(ChunkID)>& func
 
 void glxy::ChunkManager::ForEachChunkInChunkArea(const IntRect& area, const std::function<void(Vector2i)>& func) const
 {
-    for (int32_t i = floor(static_cast<float>(area.position.x) / getChunkSize());
-    i < ceil(static_cast<float>(area.position.x + area.size.x) / getChunkSize()); i++)
-        for (int32_t j = floor(static_cast<float>(area.position.y) / getChunkSize());
-            j < ceil(static_cast<float>(area.position.y + area.size.y) / getChunkSize()); j++)
+    for (int32_t i = std::floor(static_cast<float>(area.position.x) / getChunkSize());
+    i < std::ceil(static_cast<float>(area.position.x + area.size.x) / getChunkSize()); i++)
+        for (int32_t j = std::floor(static_cast<float>(area.position.y) / getChunkSize());
+            j < std::ceil(static_cast<float>(area.position.y + area.size.y) / getChunkSize()); j++)
         {
             func(Vector2i(i, j));
         }
@@ -38,7 +32,7 @@ Color glxy::ChunkManager::getBackgroundColor() const
 
 ChunkID glxy::ChunkManager::getChunkFromCoord(const Vector2i coord) const
 {
-    return ChunkID(floorf(static_cast<float>(coord.x) / chunkSize), floorf(static_cast<float>(coord.y) / chunkSize));
+    return ChunkID(std::floor(static_cast<float>(coord.x) / chunkSize), std::floor(static_cast<float>(coord.y) / chunkSize));
 }
 
 Color glxy::ChunkManager::getPixelColor(const Vector2i coord, const LayerID layerID) const
@@ -63,6 +57,16 @@ bool glxy::ChunkManager::getPixelSelectionTemp(const Vector2i coord) const
 {
     const Vector2u pos = Vector2u(modneg(coord.x, chunkSize), modneg(coord.y, chunkSize));
     return imageChunks.at(getChunkFromCoord(coord)).getPixelSelectionTemp(pos);
+}
+
+uint32_t glxy::ChunkManager::getLastUpdated(const ChunkID chunkID) const
+{
+    return imageChunks.at(chunkID).getLastUpdated();
+}
+
+void glxy::ChunkManager::setLastUpdated(const ChunkID chunkID, const uint32_t time) const
+{
+    imageChunks.at(chunkID).setLastUpdated(time);
 }
 
 Vector2u glxy::ChunkManager::getChunkCount() const
@@ -150,15 +154,15 @@ bool glxy::ChunkManager::hasSelectionLayer(const ChunkID chunkID) const
     return imageChunks.at(chunkID).hasSelectionLayer();
 }
 
-bool glxy::ChunkManager::anyHasSelectionLayer() const
+bool glxy::ChunkManager::allHaveSelectionLayer() const
 {
-    bool anyHasLayer = false;
+    bool allHaveLayer = true;
     imageChunks.ForEachChunk([&](const ImageChunk& chunk)
     {
-        if (chunk.hasSelectionLayer())
-            anyHasLayer = true;
+        if (!chunk.hasSelectionLayer())
+            allHaveLayer = false;
     });
-    return anyHasLayer;
+    return allHaveLayer;
 }
 
 bool glxy::ChunkManager::hasSelectionTempLayer(const ChunkID chunkID) const
@@ -296,10 +300,6 @@ void glxy::ChunkManager::selectArea(const FloatRect& area)
     lassoEndPos = Vector2f(-1, -1);
 
     lockAllChunks();
-    if (!anyHasSelectionLayer())
-        createSelectionLayerAll();
-    else
-        clearSelectionLayerAll(false);
     selectFinish();
     unlockAllChunks();
 
@@ -321,10 +321,10 @@ void glxy::ChunkManager::boxSelectEnd(const Vector2u endPos)
         return;
 
     Vector2i minPos, maxPos;
-    minPos.x = min(selectStartPos.x, endPos.x);
-    maxPos.x = min(max(selectStartPos.x, endPos.x), getSize().x - 1);
-    minPos.y = min(selectStartPos.y, endPos.y);
-    maxPos.y = min(max(selectStartPos.y, endPos.y), getSize().y - 1);
+    minPos.x = std::min(selectStartPos.x, endPos.x);
+    maxPos.x = std::min(std::max(selectStartPos.x, endPos.x), getSize().x - 1);
+    minPos.y = std::min(selectStartPos.y, endPos.y);
+    maxPos.y = std::min(std::max(selectStartPos.y, endPos.y), getSize().y - 1);
     selectShape = IntRect(minPos, maxPos - minPos + Vector2i(1, 1));
 
     this->selectEndPos = endPos;
@@ -333,8 +333,6 @@ void glxy::ChunkManager::boxSelectEnd(const Vector2u endPos)
 void glxy::ChunkManager::selectFinish()
 {
     selectStarted = false;
-    if (!anyHasSelectionLayer())
-        createSelectionLayerAll();
     IntRect bounds;
     if (shapeSelectType == ShapeSelectType::Lasso)
     {
@@ -352,8 +350,8 @@ void glxy::ChunkManager::selectFinish()
                 maxVal.y = n.y;
         }
         const FloatRect t = FloatRect(minVal, maxVal - minVal);
-        bounds = IntRect(Vector2i(floor(t.position.x), floor(t.position.y)),
-            Vector2i(ceil(t.size.x), ceil(t.size.y)));
+        bounds = IntRect(Vector2i(std::floor(t.position.x), std::floor(t.position.y)),
+            Vector2i(std::ceil(t.size.x), std::ceil(t.size.y)));
     }
     else
         bounds = selectShape;
@@ -370,7 +368,7 @@ void glxy::ChunkManager::selectFinish()
 
         renderTexture.setView(View(FloatRect(Vector2f(0, 0), Vector2f(chunkSize))));
 
-        RenderLayerToTexture(*getChunkImageSelection(chunkID), chunkSize, 255, BlendNone, renderTexture);
+        RenderLayerToTexture(getChunkImageSelection(chunkID), chunkSize, 255, BlendNone, renderTexture);
 
         renderTexture.setView(View(FloatRect(Vector2f(chunkID.x * chunkGeneralSize, chunkID.y * chunkGeneralSize),
             Vector2f(chunkSize))));
@@ -426,6 +424,9 @@ void glxy::ChunkManager::selectFinish()
         }
         }
         renderTexture.display();
+
+        if (!hasSelectionLayer(chunkID))
+            createSelectionLayer(chunkID);
         PasteImage(renderTexture.getTexture().copyToImage(), Vector2i(chunkID.x * getChunkSize(), chunkID.y * getChunkSize()), IntRect(), ImageLayerType::Selection);
     });
 
@@ -478,7 +479,11 @@ void glxy::ChunkManager::wandFinish()
     if (!anyHasSelectionTempLayer())
         return;
     lockAllChunks();
-    createSelectionLayerAll();
+    ForEachChunkInChunkArea(selectWand, [&](const ChunkID chunkID)
+    {
+        if (!hasSelectionLayer(chunkID))
+            createSelectionLayer(chunkID);
+    });
     for (int32_t x = selectWand.position.x; x < selectWand.position.x + selectWand.size.x; x++)
         for (int32_t y = selectWand.position.y; y < selectWand.position.y + selectWand.size.y; y++)
         {
@@ -622,14 +627,14 @@ void glxy::ChunkManager::deleteColorTempLayerAll()
     });
 }
 
-void glxy::ChunkManager::createSelectionLayerAll()
+void glxy::ChunkManager::createSelectionLayer(const ChunkID chunkID)
 {
-    imageChunks.ForEachChunk([](ImageChunk& n){n.createSelectionLayer();});
+    imageChunks.at(chunkID).createSelectionLayer();
 }
 
-void glxy::ChunkManager::clearSelectionLayerAll(const bool state) const
+void glxy::ChunkManager::clearSelectionLayer(const bool state, const ChunkID chunkID) const
 {
-    imageChunks.ForEachChunk([&](const ImageChunk& n){n.clearSelection(state);});
+    imageChunks.at(chunkID).clearSelection(state);
 }
 
 void glxy::ChunkManager::deleteSelectionLayerAll()
@@ -662,10 +667,15 @@ void glxy::ChunkManager::deleteSelectionTempLayerAll()
     });
 }
 
-void glxy::ChunkManager::addLayer(const LayerID layerID, const Color color)
+void glxy::ChunkManager::addLayer(const LayerID layerID)
 {
-    imageChunks.ForEachChunk([&](ImageChunk& n){n.addLayer(layerID, color);});
+    imageChunks.ForEachChunk([&](ImageChunk& n){n.addLayer(layerID);});
     layers.emplace_back();
+}
+
+void glxy::ChunkManager::clearLayer(const LayerID layerID, const Color color)
+{
+    imageChunks.ForEachChunk([&](ImageChunk& n){n.clearLayer(layerID, color);});
 }
 
 void glxy::ChunkManager::duplicateLayer(const LayerID layerID)
@@ -783,59 +793,127 @@ void glxy::ChunkManager::rotate180()
 
 IntRect glxy::ChunkManager::FloodFill(const ImageLayerType layer, const Vector2i pos, const Color color, const int8_t tolerance, const bool mask, const LayerID layerID)
 {
+    const Vector2u size = getSize();
     Vector2i maxPos;
-    Vector2i minPos = Vector2i(getSize());
-    vector<vector<bool>> passed;
-    passed.resize(getSize().x);
-    for (int32_t i = 0; i < getSize().x; i++)
-        passed.at(i).resize(getSize().y, false);
+    Vector2i minPos = Vector2i(size);
 
-    vector<Vector2i> targetPixels;
+    //0 - not explored, 1 - explored, 2 - explore next
+    vector<int32_t> pixelsToCheckInLine;
+    vector<uint8_t> passed;
+    passed.resize(size.x * size.y, 0);
+    pixelsToCheckInLine.resize(size.y);
 
-    if (!mask || getPixelSelection(Vector2i(pos)))
-        targetPixels.emplace_back(pos);
     const Color targetColor = getPixelColor(Vector2i(pos), layerID);
-
-    while (!targetPixels.empty())
+    int32_t exploreRow = pos.y;
+    if (!mask || hasSelectionLayer(getChunkFromCoord(pos)) && getPixelSelection(Vector2i(pos)))
     {
-        const Vector2i newPos = targetPixels.back();
-        const Color pixelColor = getPixelColor(newPos, layerID);
-        if (!SameColor(pixelColor, targetColor, tolerance) || passed.at(newPos.x).at(newPos.y))
-        {
-            targetPixels.pop_back();
-            continue;
-        }
-        passed.at(newPos.x).at(newPos.y) = true;
-        minPos.x = min(newPos.x, minPos.x);
-        maxPos.x = max(newPos.x, maxPos.x);
-        minPos.y = min(newPos.y, minPos.y);
-        maxPos.y = max(newPos.y, maxPos.y);
+        passed.at(pos.x + pos.y * size.x) = 2;
+        pixelsToCheckInLine.at(exploreRow) = 1;
+    }
 
+    const auto colorPixel = [&](const Vector2i colorPos)
+    {
         switch (layer)
         {
         case ImageLayerType::Color:
-            setPixelColor(newPos, color, layerID);
+            setPixelColor(colorPos, color, layerID);
             break;
         case ImageLayerType::Selection:
-            setPixelSelection(newPos, color == Color::Black);
+            setPixelSelection(colorPos, color == Color::Black);
             break;
         case ImageLayerType::ColorTemp:
-            setPixelColorTemp(newPos, color);
+            setPixelColorTemp(colorPos, color);
             break;
         case ImageLayerType::SelectionTemp:
-            setPixelSelectionTemp(newPos, color == Color::Black);
+            setPixelSelectionTemp(colorPos, color == Color::Black);
             break;
         }
+    };
 
-        targetPixels.pop_back();
-        if (newPos.x > 0 && (!mask || getPixelSelection(newPos - Vector2i(1, 0))))
-            targetPixels.emplace_back(newPos - Vector2i(1, 0));
-        if (newPos.y > 0 && (!mask || getPixelSelection(newPos - Vector2i(0, 1))))
-            targetPixels.emplace_back(newPos - Vector2i(0, 1));
-        if (newPos.x < getSize().x - 1 && (!mask || getPixelSelection(newPos + Vector2i(1, 0))))
-            targetPixels.emplace_back(newPos + Vector2i(1, 0));
-        if (newPos.y < getSize().y - 1 && (!mask || getPixelSelection(newPos + Vector2i(0, 1))))
-            targetPixels.emplace_back(newPos + Vector2i(0, 1));
+    while (true)
+    {
+        bool allZero = true;
+        for (int32_t i = 0; i < pixelsToCheckInLine.size(); i++)
+            if (pixelsToCheckInLine.at(i))
+            {
+                allZero = false;
+                exploreRow = i;
+                break;
+            }
+
+        if (allZero)
+            break;
+
+        bool unexploredBack = false;
+        for (int32_t x = 0; x < size.x; x++)
+        {
+            if (passed.at(x + exploreRow * size.x) == 2)
+            {
+                passed.at(x + exploreRow * size.x) = 1;
+                pixelsToCheckInLine.at(exploreRow)--;
+
+                if (!SameColor(getPixelColor(Vector2i(x, exploreRow), layerID), targetColor, tolerance))
+                {
+                    unexploredBack = false;
+                    continue;
+                }
+
+                minPos.x = std::min(x, minPos.x);
+                maxPos.x = std::max(x, maxPos.x);
+                minPos.y = std::min(exploreRow, minPos.y);
+                maxPos.y = std::max(exploreRow, maxPos.y);
+                colorPixel(Vector2i(x, exploreRow));
+                if (exploreRow > 0 && !passed.at(x + (exploreRow - 1) * size.x) &&
+                    (!mask || hasSelectionLayer(getChunkFromCoord(pos)) && getPixelSelection(Vector2i(x, exploreRow - 1))))
+                {
+                    passed.at(x + (exploreRow - 1) * size.x) = 2;
+                    pixelsToCheckInLine.at(exploreRow - 1)++;
+                }
+                if (exploreRow < size.y - 1 && !passed.at(x + (exploreRow + 1) * size.x) &&
+                    (!mask || hasSelectionLayer(getChunkFromCoord(pos)) && getPixelSelection(Vector2i(x, exploreRow + 1))))
+                {
+                    passed.at(x + (exploreRow + 1) * size.x) = 2;
+                    pixelsToCheckInLine.at(exploreRow + 1)++;
+                }
+                if (x < size.x - 1 && !passed.at(x + 1 + exploreRow * size.x) &&
+                    (!mask || hasSelectionLayer(getChunkFromCoord(pos)) && getPixelSelection(Vector2i(x + 1, exploreRow))))
+                {
+                    passed.at(x + 1 + exploreRow * size.x) = 2;
+                    pixelsToCheckInLine.at(exploreRow)++;
+                }
+
+                if (unexploredBack)
+                    for (int32_t back = x - 1; back >= 0; back--)
+                    {
+                        if (passed.at(back + exploreRow * size.x) == 1 || (mask && (!hasSelectionLayer(getChunkFromCoord(pos)) || !getPixelSelection(Vector2i(back, exploreRow)))))
+                            break;
+                        passed.at(back + exploreRow * size.x) = 1;
+                        if (!SameColor(getPixelColor(Vector2i(back, exploreRow), layerID), targetColor, tolerance))
+                            break;
+
+                        minPos.x = std::min(back, minPos.x);
+                        maxPos.x = std::max(back, maxPos.x);
+                        colorPixel(Vector2i(back, exploreRow));
+                        if (exploreRow > 0 && !passed.at(back + (exploreRow - 1) * size.x) &&
+                            (!mask || hasSelectionLayer(getChunkFromCoord(pos)) && getPixelSelection(Vector2i(back, exploreRow - 1))))
+                        {
+                            passed.at(back + (exploreRow - 1) * size.x) = 2;
+                            pixelsToCheckInLine.at(exploreRow - 1)++;
+                        }
+                        if (exploreRow < size.y - 1 && !passed.at(back + (exploreRow + 1) * size.x) &&
+                            (!mask || hasSelectionLayer(getChunkFromCoord(pos)) && getPixelSelection(Vector2i(back, exploreRow + 1))))
+                        {
+                            passed.at(back + (exploreRow + 1) * size.x) = 2;
+                            pixelsToCheckInLine.at(exploreRow + 1)++;
+                        }
+                    }
+                if (pixelsToCheckInLine.at(exploreRow) == 0)
+                    break;
+                unexploredBack = false;
+            }
+            else if (passed.at(x + exploreRow * size.x) == 0)
+                unexploredBack = true;
+        }
     }
     return {Vector2i(minPos), Vector2i(maxPos) - Vector2i(minPos) + Vector2i(1, 1)};
 }
@@ -857,8 +935,8 @@ void glxy::ChunkManager::AllocateChunksFixed(const Vector2u size)
     chunkSize = c_maxChunkSize;
     for (uint16_t factor = c_minChunkSize; factor <= c_maxChunkSize; factor *= 2)
     {
-        imageChunks.setChunkCount(Vector2u(ceil(static_cast<float>(getSize().x) / factor),
-            ceil(static_cast<float>(getSize().y) / factor)));
+        imageChunks.setChunkCount(Vector2u(std::ceil(static_cast<float>(getSize().x) / factor),
+            std::ceil(static_cast<float>(getSize().y) / factor)));
         if (imageChunks.getChunkCount().x * imageChunks.getChunkCount().y <= 128)
         {
             chunkSize = factor;
@@ -871,9 +949,10 @@ void glxy::ChunkManager::AllocateChunksFixed(const Vector2u size)
         ImageChunk& back = imageChunks.AddChunkFixed(
             ImageChunk(getChunkSize(Vector2i(i % getChunkCount().x, i / getChunkCount().x)),
             Vector2i(i % getChunkCount().x * chunkSize, i / getChunkCount().x * chunkSize)));
-        for (LayerID j = 0; j < layers.size() - 1; j++)
-            back.addLayer(0, Color::Transparent);
-        back.addLayer(0, backgroundColor);
+        for (LayerID j = 0; j < layers.size(); j++)
+            back.addLayer(0);
+        back.clearLayer(0, backgroundColor);
+        back.InvalidateSelectionTextures();
     }
 }
 
@@ -883,7 +962,7 @@ void glxy::ChunkManager::AllocateChunkInfinite(const ChunkID chunkID)
     ImageChunk& back = imageChunks.AddChunkInfinite(chunkID, ImageChunk(Vector2u(chunkSize, chunkSize),
         ChunkID(chunkID.x * chunkSize, chunkID.y * chunkSize)));
     for (LayerID j = 0; j < layers.size(); j++)
-        back.addLayer(0, Color::Transparent);
+        back.addLayer(0);
 }
 
 void glxy::ChunkManager::MergeColorTempLayer(const LayerID layerID, const BlendMode& blendMode)
@@ -903,10 +982,10 @@ void glxy::ChunkManager::CopyImage(Image& target, const Vector2i dest, const Int
     Vector2i size = area.size;
     if (area == IntRect())
         size = Vector2i(getSize());
-    const Vector2i chunkStart = Vector2i(floor(static_cast<float>(area.position.x) / chunkSize),
-        floor(static_cast<float>(area.position.y) / chunkSize));
-    const Vector2i chunkEnd = Vector2i(floor(static_cast<float>(area.position.x + size.x - 1) / chunkSize),
-        floor(static_cast<float>(area.position.y + size.y - 1) / chunkSize));
+    const Vector2i chunkStart = Vector2i(std::floor(static_cast<float>(area.position.x) / chunkSize),
+        std::floor(static_cast<float>(area.position.y) / chunkSize));
+    const Vector2i chunkEnd = Vector2i(std::floor(static_cast<float>(area.position.x + size.x - 1) / chunkSize),
+        std::floor(static_cast<float>(area.position.y + size.y - 1) / chunkSize));
     Vector2i offset = dest;
     uint16_t offsetX = 0;
     for (int32_t x = chunkStart.x; x <= chunkEnd.x; x++)
@@ -1013,11 +1092,13 @@ void glxy::ChunkManager::Adjust(const Adjustments adjustment, const IntRect& are
         renderArea = IntRect({0, 0}, Vector2i(getSize()));
     if (!renderArea.findIntersection(IntRect({0, 0}, Vector2i(getSize()))))
         return;
-    for (int32_t x = max(0, renderArea.position.x / chunkSize);
-         x < min(static_cast<float>(getChunkCount().x), ceilf(static_cast<float>(renderArea.position.x + renderArea.size.x) / chunkSize)); x++)
-        for (int32_t y = max(0, renderArea.position.y / chunkSize);
-             y < min(static_cast<float>(getChunkCount().y), ceilf(static_cast<float>(renderArea.position.y + renderArea.size.y) / chunkSize)); y++)
+    for (int32_t x = std::max(0, renderArea.position.x / chunkSize);
+         x < std::min(static_cast<float>(getChunkCount().x), ceilf(static_cast<float>(renderArea.position.x + renderArea.size.x) / chunkSize)); x++)
+        for (int32_t y = std::max(0, renderArea.position.y / chunkSize);
+             y < std::min(static_cast<float>(getChunkCount().y), ceilf(static_cast<float>(renderArea.position.y + renderArea.size.y) / chunkSize)); y++)
         {
+            if (!hasSelectionLayer(ChunkID(x, y)) && finalBounds)
+                continue;
             const std::optional<IntRect> intersection = renderArea.findIntersection(
                 IntRect(Vector2i(x * chunkSize, y * chunkSize), Vector2i(getChunkSize(Vector2i(x, y)))));
             IntRect rect = *intersection;
@@ -1041,11 +1122,13 @@ void glxy::ChunkManager::Effect(const Effects effect, const IntRect& area, const
         renderArea = IntRect({0, 0}, Vector2i(getSize()));
     if (!renderArea.findIntersection(IntRect({0, 0}, Vector2i(getSize()))))
         return;
-    for (int32_t x = max(0, renderArea.position.x / chunkSize);
-         x < min(static_cast<float>(getChunkCount().x), ceilf(static_cast<float>(renderArea.position.x + renderArea.size.x) / chunkSize)); x++)
-        for (int32_t y = max(0, renderArea.position.y / chunkSize);
-             y < min(static_cast<float>(getChunkCount().y), ceilf(static_cast<float>(renderArea.position.y + renderArea.size.y) / chunkSize)); y++)
+    for (int32_t x = std::max(0, renderArea.position.x / chunkSize);
+         x < std::min(static_cast<float>(getChunkCount().x), ceilf(static_cast<float>(renderArea.position.x + renderArea.size.x) / chunkSize)); x++)
+        for (int32_t y = std::max(0, renderArea.position.y / chunkSize);
+             y < std::min(static_cast<float>(getChunkCount().y), ceilf(static_cast<float>(renderArea.position.y + renderArea.size.y) / chunkSize)); y++)
         {
+            if (!hasSelectionLayer(ChunkID(x, y)) && finalBounds)
+                continue;
             const std::optional<IntRect> intersection = renderArea.findIntersection(
                 IntRect(Vector2i(x * chunkSize, y * chunkSize), Vector2i(getChunkSize(Vector2i(x, y)))));
             IntRect rect = *intersection;

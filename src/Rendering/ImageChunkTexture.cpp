@@ -65,14 +65,14 @@ void glxy::ImageChunkTexture::deleteSelectionTemp()
     selectionTempTexture.reset();
 }
 
-Texture glxy::ImageChunkTexture::RenderChunk(const uint32_t resolution, const bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID) const
+Texture glxy::ImageChunkTexture::RenderChunk(const uint32_t resolution, const bool overwriteWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID, const bool skipLayer) const
 {
-    const Vector2u size = Vector2u(max(getSize().x / resolution, 1U), max(getSize().y / resolution, 1U));
+    const Vector2u size = Vector2u(std::max(getSize().x / resolution, 1U), std::max(getSize().y / resolution, 1U));
     RenderTexture renderTexture;
     validate(renderTexture.resize(size, {0U, 8U, 0U, 0U, 0U}));
 
 #ifdef GL_ALPHA_TEST
-    if (overrideWithTempLayer)
+    if (overwriteWithTempLayer)
         renderTexture.resetGLStates(); // workaround for mixing SFML with OpenGL
 #endif
 
@@ -85,7 +85,7 @@ Texture glxy::ImageChunkTexture::RenderChunk(const uint32_t resolution, const bo
         if (!chunkManager.isLayerEnabled(i))
             continue;
 
-        if (overrideWithTempLayer)
+        if (overwriteWithTempLayer)
         {
             RenderStates states = RenderStates(c_blendModes.at(chunkManager.getLayerBlendMode(i)),
                 {StencilComparison::Always, StencilUpdateOperation::Replace, 0x01, 0xFF, false},
@@ -97,7 +97,7 @@ Texture glxy::ImageChunkTexture::RenderChunk(const uint32_t resolution, const bo
                 glAlphaFunc(GL_GREATER, 0.5f);
 #endif
                 states.stencilMode.stencilOnly = true;
-                RenderLayerToTexture(*chunkManager.getChunkImageSelection(chunkID), size, 255, states, renderTexture);
+                RenderLayerToTexture(chunkManager.getChunkImageSelection(chunkID), size, 255, states, renderTexture);
 #ifdef GL_ALPHA_TEST
                 glDisable(GL_ALPHA_TEST);
 #endif
@@ -105,42 +105,42 @@ Texture glxy::ImageChunkTexture::RenderChunk(const uint32_t resolution, const bo
                 states.stencilMode.stencilOnly = false;
                 states.stencilMode.stencilComparison = StencilComparison::Equal;
                 states.stencilMode.stencilUpdateOperation = StencilUpdateOperation::Keep;
-                RenderLayerToTexture(*chunkManager.getChunkImageColorTemp(chunkID), size, chunkManager.getLayerTransparency(i), states, renderTexture);
+                RenderLayerToTexture(chunkManager.getChunkImageColorTemp(chunkID), size, chunkManager.getLayerTransparency(i), states, renderTexture);
 
                 states.stencilMode.stencilComparison = StencilComparison::NotEqual;
-                RenderLayerToTexture(*chunkManager.getChunkImageColor(chunkID, i), size, chunkManager.getLayerTransparency(i), states, renderTexture);
+                RenderLayerToTexture(chunkManager.getChunkImageColor(chunkID, i), size, chunkManager.getLayerTransparency(i), states, renderTexture);
             }
             else
-                RenderLayerToTexture(*chunkManager.getChunkImageColor(chunkID, i), size, chunkManager.getLayerTransparency(i), states.blendMode, renderTexture);
+                RenderLayerToTexture(chunkManager.getChunkImageColor(chunkID, i), size, chunkManager.getLayerTransparency(i), states.blendMode, renderTexture);
         }
         else
         {
-            RenderLayerToTexture(*chunkManager.getChunkImageColor(chunkID, i), size, chunkManager.getLayerTransparency(i),
-                c_blendModes.at(chunkManager.getLayerBlendMode(i)), renderTexture);
+            if (i != layerID || !skipLayer)
+                RenderLayerToTexture(chunkManager.getChunkImageColor(chunkID, i), size, chunkManager.getLayerTransparency(i),
+                    c_blendModes.at(chunkManager.getLayerBlendMode(i)), renderTexture);
             if (i == layerID && chunkManager.getChunkImageColorTemp(chunkID))
-                RenderLayerToTexture(*chunkManager.getChunkImageColorTemp(chunkID), size, 255, tempLayerBlendMode, renderTexture);
+                RenderLayerToTexture(chunkManager.getChunkImageColorTemp(chunkID), size, 255, tempLayerBlendMode, renderTexture);
         }
     }
     renderTexture.display();
     return renderTexture.getTexture();
 }
 
-void glxy::ImageChunkTexture::RenderLowQuality(const bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID)
+void glxy::ImageChunkTexture::RenderLowQuality(const bool overwriteWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID, const bool skipLayer)
 {
-    lowTexture = make_unique<Texture>(RenderChunk(c_lowQualityChunkFactor, overrideWithTempLayer, tempLayerBlendMode, layerID));
+    lowTexture = make_unique<Texture>(RenderChunk(c_lowQualityChunkFactor, overwriteWithTempLayer, tempLayerBlendMode, layerID, skipLayer));
     lowTexture->setSmooth(true);
 }
 
-void glxy::ImageChunkTexture::RenderMediumQuality(const bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode,
-    LayerID layerID)
+void glxy::ImageChunkTexture::RenderMediumQuality(const bool overwriteWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID, const bool skipLayer)
 {
-    mediumTexture = make_unique<Texture>(RenderChunk(c_mediumQualityChunkFactor, overrideWithTempLayer, tempLayerBlendMode, layerID));
+    mediumTexture = make_unique<Texture>(RenderChunk(c_mediumQualityChunkFactor, overwriteWithTempLayer, tempLayerBlendMode, layerID, skipLayer));
     mediumTexture->setSmooth(true);
 }
 
-void glxy::ImageChunkTexture::RenderNativeQuality(const bool overrideWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID)
+void glxy::ImageChunkTexture::RenderNativeQuality(const bool overwriteWithTempLayer, const BlendMode& tempLayerBlendMode, const LayerID layerID, const bool skipLayer)
 {
-    nativeTexture = make_unique<Texture>(RenderChunk(1, overrideWithTempLayer, tempLayerBlendMode, layerID));
+    nativeTexture = make_unique<Texture>(RenderChunk(1, overwriteWithTempLayer, tempLayerBlendMode, layerID, skipLayer));
 }
 
 void glxy::ImageChunkTexture::MakeSelectionTexture()

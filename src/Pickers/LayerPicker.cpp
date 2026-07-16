@@ -122,12 +122,12 @@ LayerPicker::Return LayerPicker::Draw(const Window& window, const float& GUIScal
     lastClickedLayer = -1;
 
     const Vector2f windowSize = Vector2f(200.f, 250.f) * GUIScale;
-    ImGui::SetNextWindowPos(Vector2f(window.getSize().x - 25 * GUIScale - windowSize.x, window.getSize().y - 40 * GUIScale - windowSize.y));
+    ImGui::SetNextWindowPos(Vector2f(window.getSize().x - 20 * GUIScale - windowSize.x, window.getSize().y - 40 * GUIScale - windowSize.y));
     ImGui::SetNextWindowSize(windowSize);
 
     const Color32f t = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
     ImGui::PushStyleColor(ImGuiCol_WindowBg, Color32f(t.r, t.g, t.b, 0.8f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Vector2f(5, 5));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Vector2f(5, 5) * GUIScale);
 
     if (!ImGui::Begin("windowName[2]"_C, &windowOpen,
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
@@ -159,7 +159,6 @@ LayerPicker::Return LayerPicker::Draw(const Window& window, const float& GUIScal
 
             const int32_t layerBoxSize = layers.infinite ? 40 : 60;
 
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Vector2f(5, 5));
             if (ImGui::BeginChild(("LayerID" + to_string(j++)).c_str(), Vector2f(ImGui::GetContentRegionAvail().x, layerBoxSize * GUIScale), ImGuiChildFlags_AlwaysUseWindowPadding))
             {
                 const float width = ImGui::GetContentRegionAvail().x;
@@ -170,7 +169,7 @@ LayerPicker::Return LayerPicker::Draw(const Window& window, const float& GUIScal
                         Vector2f(0, 0), Vector2f(1, 1), Color::White, Color(128, 128, 128));
                 }
 
-                ImGui::SetCursorPos(Vector2f(layerBoxSize * GUIScale + 10, layerBoxSize * GUIScale / 3));
+                ImGui::SetCursorPos(Vector2f(layerBoxSize * GUIScale, layerBoxSize * GUIScale / 3));
 
                 if (layers.layers.at(i).name.size() > 10)
                     ImGui::Text("%s...", layers.layers.at(i).name.substr(0, 7).c_str());
@@ -196,7 +195,6 @@ LayerPicker::Return LayerPicker::Draw(const Window& window, const float& GUIScal
                     popUpState.push_back(PopUpState::LayerProperties);
             }
             ImGui::EndChild();
-            ImGui::PopStyleVar();
             ImGui::PopStyleColor();
         }
     }
@@ -205,8 +203,8 @@ LayerPicker::Return LayerPicker::Draw(const Window& window, const float& GUIScal
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, Vector2f(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, Vector2f((ImGui::GetContentRegionAvail().x - 25 * GUIScale) / (count - 1) - 25 * GUIScale, 0));
     const array toolColors = {
-        Color(83, 170, 17), Color(170, 17, 36), Color(170, 163, 17),
-        Color(17, 170, 87), Color(17, 170, 138), Color(17, 65, 170),
+        Color(17, 170, 33), Color(170, 17, 36), Color(170, 163, 17),
+        Color(17, 137, 170), Color(17, 170, 138), Color(17, 170, 87),
         Color(170, 75, 17),
     };
     for (uint8_t i = 0; i < count; i++)

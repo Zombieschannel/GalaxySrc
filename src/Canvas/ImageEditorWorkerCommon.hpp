@@ -20,13 +20,12 @@ namespace glxy
         IntRect prevShapeRenderArea;
 
         bool textDraw = false;
-        IntRect prevTextRenderArea;
 
         bool moveSelected = false;
         bool moveSelection = false;
         IntRect newMoveSelectArea;
 
-
+        bool circularShift = false;
     public:
         mutable std::mutex mtxEditorWorkerCommon;
 
@@ -42,6 +41,7 @@ namespace glxy
         bool getMoveSelection() const;
         IntRect getNewMoveSelectArea() const;
 
+        bool getCircularShift() const;
 
         bool hasUnfinishedChanges() const;
     };

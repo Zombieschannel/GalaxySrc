@@ -1,12 +1,15 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include "Namespace.hpp"
 #include <set>
 using namespace sf;
 
 namespace glxy
 {
-    struct AppSettings
+    class Config
     {
+        Config() = default;
+    public:
         Vector2u resolution = Vector2u(1280, 720);
         bool fullscreen = false;
 #ifdef SFML_DESKTOP
@@ -34,7 +37,10 @@ namespace glxy
         bool drawSelectionLines = true;
         bool colorPickerTriangle = false;
         bool debugMode = false;
-        uint8_t panMouseButton = 0;
+        int8_t middleMouseButton = 4;
+        int8_t extra1MouseButton = 6;
+        int8_t extra2MouseButton = 0;
+        int32_t thumbnailCacheSizeLimit = 3;
         std::array<bool, 3> openWindow = { true, true, true };
         std::set<std::pair<int64_t, std::string>> recentFiles;
         Vector2i gridBold = Vector2i(16, 16);
@@ -42,6 +48,7 @@ namespace glxy
         bool maintainAspectResize = true;
         bool maintainAspectCanvas = true;
         uint8_t resamplingMethod = 0;
+        bool transformSamplingSmooth = false;
 
         float brushRadius = 5.f;
         float eraserRadius = 5.f;
@@ -61,7 +68,6 @@ namespace glxy
         uint16_t textSize = 16;
         uint16_t fontID = 0;
 
-
         std::string fontLocation =
 #if defined(SFML_SYSTEM_WINDOWS)
         "C:/Windows/Fonts";
@@ -75,6 +81,7 @@ namespace glxy
         "";
 #endif
 
+        static Config& get();
         void Save() const;
         void Load();
     };

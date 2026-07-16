@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.15)
-project (Galaxy)
-set(APP_VERSION "0.3.1")
+project (Galaxy LANGUAGES ASM C CXX)
+set(APP_VERSION "0.4.0")
 set(APP_IDENTIFIER "com.Zombieschannel.Galaxy")
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")

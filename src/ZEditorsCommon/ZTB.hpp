@@ -1036,7 +1036,7 @@ public:
 		{
 			std::string data;
 			saveToMemory(data);
-			save.write(&data[0], data.size());
+			save.write(data.data(), data.size());
 			save.close();
 		}
 	}
